@@ -1,0 +1,118 @@
+# Studi kasus berbasis berita dan gambar peta yang diberikan pengguna.
+# Peristiwa nyata: kebakaran Pasar Johar Relokasi di kawasan MAJT pada 2 Feb 2022;
+# berita melaporkan kerumunan warga membuat akses mobil damkar terganggu.
+# Gambar peta menunjukkan Pos Pemadam Barito -> Relokasi Pasar Johar, rute mobil ~9 menit,
+# serta anotasi hambatan pada akses masuk dan jalur alternatif di blok-blok sebelah barat.
+#
+# CATATAN METODOLOGI:
+# - Topologi ini adalah penyederhanaan dari garis rute yang terlihat pada screenshot,
+#   bukan hasil ekstraksi GIS/koordinat GPS.
+# - Bobot dibagi menjadi estimasi per-ruas supaya rute utama berjumlah 9 unit menit
+#   dan rute alternatif berjumlah 10 unit menit, sejalan dengan waktu pada screenshot.
+# - Waktu per ruas, konektivitas persis, dan penyebutan Jl. Pelabuhan Ratu sebagai ruas
+#   hambatan perlu diverifikasi oleh anggota B lewat peta yang lebih jelas.
+# - Jangan melaporkan bobot per-edge sebagai waktu/jarak ukur aktual.
+
+metadata:
+  case_id: "pasar_johar_2022_warga_menghambat_damkar"
+  title: "Akses Damkar Terganggu Kerumunan di Pasar Johar Relokasi"
+  event_date: "2022-02-02"
+  location: "Relokasi Pasar Johar, kawasan Masjid Agung Jawa Tengah (MAJT), Semarang"
+  origin_from_map: "Pos Pemadam Barito, 2C8R+F23 (sesuai screenshot pengguna)"
+  destination_from_map: "2C9V+6QH Relokasi Pasar Johar (sesuai screenshot pengguna)"
+  reported_fact: "Kerumunan warga yang menonton membuat akses menuju lokasi kebakaran macet dan menyulitkan kendaraan damkar."
+  map_route_time_minutes: 9
+  alternate_route_time_minutes: 10
+  weight_unit: "menit estimasi (total rute diselaraskan dengan label waktu pada screenshot; bukan pengukuran per ruas)"
+  display_weight_unit: "menit estimasi"
+  source_articles:
+    - "https://semarang.bisnis.com/read/20220202/535/1496092/relokasi-pasar-johar-terbakar-ganjar-minta-pedagang-diprioritaskan"
+    - "https://jateng.antaranews.com/berita/431073/kerumunan-warga-sulitkan-pemadaman-kebakaran-pasar-johar-relokasi"
+  map_model_note: "Topologi disederhanakan berdasarkan screenshot rute dan anotasi; verifikasi jalan/edge tetap diperlukan."
+
+nodes:
+  - id: pos_damkar_barito
+    label: "Pos Pemadam Barito (awal)"
+    map_role: "origin"
+  - id: koridor_keluar_barito
+    label: "Koridor keluar dari Pos Barito"
+  - id: simpang_rute_utama
+    label: "Simpang pada rute utama menuju kawasan MAJT"
+  - id: simpang_pendekat_pasar
+    label: "Simpang pendekat Pasar Johar Relokasi"
+  - id: akses_utara_terhambat
+    label: "Akses masuk utara (titik kerumunan pada anotasi peta)"
+  - id: akses_selatan_pasar
+    label: "Akses selatan menuju area Pasar Johar Relokasi"
+  - id: titik_kebakaran_blok_f
+    label: "Titik kebakaran utama, Relokasi Pasar Johar Blok F (tujuan)"
+    map_role: "goal"
+  - id: jalan_lingkungan_barat_utara
+    label: "Jalan lingkungan sisi barat, segmen utara"
+  - id: jalan_lingkungan_barat_tengah
+    label: "Jalan lingkungan sisi barat, segmen tengah"
+  - id: jalan_lingkungan_barat_selatan
+    label: "Jalan lingkungan sisi barat, segmen selatan"
+
+edges:
+  # Rute utama sebagaimana garis rute yang tampak pada screenshot (total bobot = 9 menit estimasi).
+  - id: e01
+    from: pos_damkar_barito
+    to: koridor_keluar_barito
+    weight: 1.5
+    road: "Koridor keluar dari Pos Pemadam Barito (estimasi per ruas)"
+  - id: e02
+    from: koridor_keluar_barito
+    to: simpang_rute_utama
+    weight: 1.5
+    road: "Ruas pada koridor utama (topologi disederhanakan dari screenshot)"
+  - id: e03
+    from: simpang_rute_utama
+    to: simpang_pendekat_pasar
+    weight: 1.5
+    road: "Ruas penghubung menuju pendekat Pasar Johar (estimasi)"
+  - id: e04
+    from: simpang_pendekat_pasar
+    to: akses_utara_terhambat
+    weight: 1.5
+    road: "Pendekat utara ke akses masuk (anotasi peta mengindikasikan Jl. Pelabuhan Ratu; perlu verifikasi)"
+  - id: e05
+    from: akses_utara_terhambat
+    to: akses_selatan_pasar
+    weight: 1.5
+    road: "Segmen akses masuk yang diasumsikan terhambat kerumunan warga dan motor parkir"
+  - id: e06
+    from: akses_selatan_pasar
+    to: titik_kebakaran_blok_f
+    weight: 1.5
+    road: "Akses akhir menuju titik kebakaran Blok F (estimasi)"
+
+  # Jalur alternatif sisi barat seperti garis memutar pada anotasi peta (total rute = 10 menit estimasi).
+  - id: e07
+    from: simpang_pendekat_pasar
+    to: jalan_lingkungan_barat_utara
+    weight: 1.5
+    road: "Belok ke jaringan jalan lingkungan sisi barat (estimasi dari anotasi)"
+  - id: e08
+    from: jalan_lingkungan_barat_utara
+    to: jalan_lingkungan_barat_tengah
+    weight: 1.5
+    road: "Jalan lingkungan sisi barat, segmen tengah (estimasi)"
+  - id: e09
+    from: jalan_lingkungan_barat_tengah
+    to: jalan_lingkungan_barat_selatan
+    weight: 1.5
+    road: "Jalan lingkungan sisi barat, segmen selatan (estimasi)"
+  - id: e10
+    from: jalan_lingkungan_barat_selatan
+    to: titik_kebakaran_blok_f
+    weight: 1.0
+    road: "Akses dari sisi barat ke titik kebakaran (estimasi)"
+
+simulation:
+  title: "Pos Pemadam Barito ke kebakaran Pasar Johar Relokasi (Semarang, 2 Februari 2022)"
+  start: pos_damkar_barito
+  goal: titik_kebakaran_blok_f
+  blocked_edges: []
+  closure_edge: e05
+  closure_description: "Kerumunan warga dan motor yang berhenti/parkir menghambat akses masuk menuju titik kebakaran; lokasi edge mengikuti anotasi screenshot dan masih perlu verifikasi oleh tim B."
