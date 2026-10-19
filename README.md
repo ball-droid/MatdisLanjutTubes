@@ -61,6 +61,34 @@ python -m pytest -v
 python -m pathfinding.benchmark --repeats 1000
 ```
 
+## Tampilan output terminal
+
+Output `python -m pathfinding.simulation` disusun menjadi beberapa bagian: informasi kasus, konfigurasi titik awal/tujuan, rute awal, event penutupan, rute alternatif, ringkasan perbandingan, dan catatan validitas data. Setiap langkah rute menampilkan label lokasi serta ID ruas dan bobot estimasinya. Tidak ada dependensi tambahan untuk pemformatan terminal.
+
+Contoh ringkasan output:
+
+```text
+PATHFINDING C  |  DIJKSTRA ENGINE BASE
+Lokasi  : Relokasi Pasar Johar, kawasan MAJT, Semarang
+Tanggal : 2 Februari 2022
+Graf    : 10 node | 10 ruas
+
+01  RUTE AWAL
+  Total bobot : 9 menit estimasi
+  Jumlah ruas : 6
+
+EVENT: AKSES JALAN TERHAMBAT
+  ID ruas : e05
+
+02  RUTE ALTERNATIF
+  Total bobot : 10 menit estimasi
+  Jumlah ruas : 7
+
+RINGKASAN HASIL
+  Perubahan bobot total : +1 menit estimasi
+  Status                : Rute alternatif berhasil ditemukan
+```
+
 ## Cara kerja simulasi
 
 1. Dijkstra menghitung rute awal dari Pos Pemadam Barito ke titik kebakaran.
