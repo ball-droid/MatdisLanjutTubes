@@ -1,0 +1,411 @@
+# Skenario berita: kebakaran Relokasi Pasar Johar di kawasan MAJT, Semarang,
+# 2 Februari 2022 (Bisnis.com & ANTARA Jateng).
+#
+# Node dan ruas diambil dari jaringan jalan ASLI di sekitar lokasi berita
+# (OpenStreetMap via Overpass API, ekstraksi 2026-11-10):
+#   - titik awal : Dinas Pemadam Kebakaran Kota Semarang, Jl. Madukoro III, Krobokan
+#   - titik tujuan: akses Relokasi Pasar Johar (Jl. Barito x Jl. Tirtoyoso V), Gayamsari
+#   - node       : persimpangan jalan nyata (nama jalan + koordinat OSM ada di tiap node)
+#   - bobot      : jarak OSM / kecepatan model (jalan utama 35 km/h, sekunder 30, permukiman 20)
+#                  -> satuan MENIT ESTIMASI, bukan pengukuran lalu lintas aktual.
+#
+# Dua koridor utama hasil Dijkstra pada jaringan ini:
+#   rute awal (tercepat): Jl. Madukoro - Cokrokembang - Sudirman - Soegiyopranoto -
+#     Dokter Sutomo - Pandanaran - Kyai Saleh - Pekunden - Batan Selatan -
+#     Mayjend D.I. Panjaitan - Kartini - Barito  (utara)
+#   rute alternatif: Jl. Madukoro - Sudirman - Indraprasta - Kapten Piere Tendean -
+#     Pemuda - Depok - KH. Wahid Hasyim - Gang Warung - Pekojan - Petudungan -
+#     M.T. Haryono - Dargo - Dokter Cipto - Bugangan - Kanalsari - Tirtoyoso  (selatan)
+#
+# Sumber berita:
+#   - https://semarang.bisnis.com/read/20220202/535/1496092/relokasi-pasar-johar-terbakar-ganjar-minta-pedagang-diprioritaskan
+#   - https://jateng.antaranews.com/berita/431073/kerumunan-warga-sulitkan-pemadaman-kebakaran-pasar-johar-relokasi
+# Fakta yang dipakai: kerumunan warga yang menonton membuat jalanan macet, termasuk
+# akses jalan menuju pasar, sehingga kendaraan damkar sulit menembus (Ganjar Pranowo
+# sempat menegur warga yang menutup jalan).
+# Peta jalan: OpenStreetMap contributors (ODbL).
+
+metadata:
+  case_id: "pasar_johar_2022_damkar_jaringan_jalan_asli"
+  title: "Rute Damkar ke Kebakaran Relokasi Pasar Johar (jaringan jalan asli)"
+  event_date: "2022-02-02"
+  location: "Relokasi Pasar Johar, kawasan Masjid Agung Jawa Tengah (MAJT), Semarang"
+  origin: "Dinas Pemadam Kebakaran Kota Semarang, Jl. Madukoro III, Krobokan, Semarang Barat"
+  origin_coord: "-6.9786498,110.4005843"
+  destination: "Akses Relokasi Pasar Johar (Jl. Barito x Jl. Tirtoyoso V), Sambirejo, Gayamsari"
+  destination_coord: "-6.9787493,110.4411586"
+  reported_fact: "Kerumunan warga yang menonton membuat jalanan macet, termasuk akses jalan menuju Pasar Johar Relokasi, sehingga kendaraan damkar sulit menembus."
+  graph_source: "OpenStreetMap via Overpass API (ekstraksi 2026-11-10), disederhanakan menjadi simpang-simpang utama"
+  node_count: 31
+  edge_count: 33
+  weight_rule: "menit = jarak_meter / (kecepatan_model km/jam) x 60; utama 35, sekunder 30, permukiman 20"
+  display_weight_unit: "menit estimasi"
+  data_note: "Node dan ruas berasal dari jaringan jalan nyata di sekitar lokasi berita (OpenStreetMap, ekstraksi 2026-11-10), disederhanakan menjadi simpang-simpang utama. Bobot dihitung dari jarak peta dibagi kecepatan model (35/30/20 km/jam), sehingga angkanya menit estimasi - bukan waktu tempuh terukur atau kondisi lalu lintas pada 2 Februari 2022. Posisi persimpangan persis tetap perlu dicek ulang pada peta resmi sebelum dipakai untuk laporan final."
+  source_articles:
+    - "https://semarang.bisnis.com/read/20220202/535/1496092/relokasi-pasar-johar-terbakar-ganjar-minta-pedagang-diprioritaskan"
+    - "https://jateng.antaranews.com/berita/431073/kerumunan-warga-sulitkan-pemadaman-kebakaran-pasar-johar-relokasi"
+
+nodes:
+  - id: pos_damkar_madukoro
+    label: "Dinas Pemadam Kebakaran Kota Semarang (Jl. Madukoro III)"
+    lat: -6.9786176
+    lon: 110.4001383
+    osm_node: 1919923494
+  - id: simpang_madukoro_v
+    label: "Simpang Jl. Madukoro V × Jl. Madukoro III"
+    lat: -6.9790148
+    lon: 110.4001748
+    osm_node: 1919937330
+  - id: simpang_madukoro_cokrokembang
+    label: "Simpang Jl. Madukoro III × Jl. Cokrokembang"
+    lat: -6.9790301
+    lon: 110.399982
+    osm_node: 5428067515
+  - id: simpang_madukoro_east
+    label: "Simpang Jl. Madukoro III × Jl. Madukoro"
+    lat: -6.9789031
+    lon: 110.4010628
+    osm_node: 4933637574
+  - id: simpang_cokrokembang_sudirman
+    label: "Simpang Jl. Cokrokembang × Jl. Jenderal Sudirman"
+    lat: -6.9806681
+    lon: 110.400154
+    osm_node: 1919937382
+  - id: simpang_sudirman_soegiyopranoto
+    label: "Simpang Jl. Jenderal Sudirman × Jl. MGR Soegiyopranoto"
+    lat: -6.9810779
+    lon: 110.4014766
+    osm_node: 79761962
+  - id: simpang_soegiyopranoto_sutomo
+    label: "Simpang Jl. MGR Soegiyopranoto × Jl. Dokter Sutomo"
+    lat: -6.9844678
+    lon: 110.4091972
+    osm_node: 79761957
+  - id: simpang_sutomo_pandanaran
+    label: "Simpang Jl. Dokter Sutomo × Jl. Pandanaran"
+    lat: -6.9847221
+    lon: 110.4094535
+    osm_node: 2436108658
+  - id: simpang_pandanaran_kyaisaleh
+    label: "Simpang Jl. Pandanaran × Jl. Kyai Saleh"
+    lat: -6.9865497
+    lon: 110.4138406
+    osm_node: 7119000260
+  - id: simpang_kyaisaleh_pekunden
+    label: "Simpang Jl. Kyai Saleh × Jl. Pekunden"
+    lat: -6.986453
+    lon: 110.4138619
+    osm_node: 7119000261
+  - id: simpang_pekunden_batan
+    label: "Simpang Jl. Pekunden × Jl. Batan Selatan"
+    lat: -6.9847995
+    lon: 110.4142003
+    osm_node: 259668137
+  - id: simpang_batan_panjaitan
+    label: "Simpang Jl. Batan Selatan × Jl. Mayjend D.I. Panjaitan"
+    lat: -6.9855466
+    lon: 110.4176185
+    osm_node: 257094446
+  - id: simpang_panjaitan_haryono
+    label: "Simpang Jl. Mayjend D.I. Panjaitan × Jl. Kartini × Jl. M.T. Haryono"
+    lat: -6.9853872
+    lon: 110.4315944
+    osm_node: 79428875
+  - id: simpang_kartini_barito
+    label: "Simpang Jl. Kartini × Jl. Barito"
+    lat: -6.9856806
+    lon: 110.4398125
+    osm_node: 1280109874
+  - id: simpang_barito_tirtoyoso
+    label: "Simpang Jl. Barito × Jl. Tirtoyoso XI"
+    lat: -6.9810549
+    lon: 110.4407921
+    osm_node: 2087600727
+  - id: simpang_tirtoyoso_xi
+    label: "Simpang Jl. Tirtoyoso XI × Jl. Tirtoyoso Batas"
+    lat: -6.9810185
+    lon: 110.4399262
+    osm_node: 3230310749
+  - id: simpang_tirtoyoso_batas
+    label: "Simpang Jl. Tirtoyoso Batas × Jl. Tirtoyoso V"
+    lat: -6.9786949
+    lon: 110.4392905
+    osm_node: 3230310693
+  - id: simpang_madukoro_sudirman
+    label: "Simpang Jl. Madukoro × Jl. Jenderal Sudirman"
+    lat: -6.9808666
+    lon: 110.4014155
+    osm_node: 2436172328
+  - id: simpang_sudirman_soegiyopranoto2
+    label: "Simpang Jl. Jenderal Sudirman × Jl. MGR Soegiyopranoto (sisi timur)"
+    lat: -6.9808873
+    lon: 110.4015208
+    osm_node: 257678727
+  - id: simpang_soegiyopranoto_indraprasta
+    label: "Simpang Jl. MGR Soegiyopranoto × Jl. Indraprasta"
+    lat: -6.9809322
+    lon: 110.4026634
+    osm_node: 257678730
+  - id: simpang_indraprasta_tendean
+    label: "Simpang Jl. Indraprasta × Jl. Kapten Piere Tendean"
+    lat: -6.9785581
+    lon: 110.4116493
+    osm_node: 257678742
+  - id: simpang_tendean_pemuda
+    label: "Simpang Jl. Kapten Piere Tendean × Jl. Pemuda"
+    lat: -6.9778946
+    lon: 110.4157988
+    osm_node: 257678747
+  - id: simpang_depok_wahidhasyim
+    label: "Simpang Jl. Depok × Jl. KH. Wahid Hasyim"
+    lat: -6.9765057
+    lon: 110.4205462
+    osm_node: 257677223
+  - id: simpang_wahidhasyim_warung
+    label: "Simpang Jl. KH. Wahid Hasyim × Jl. Gang Warung"
+    lat: -6.9749106
+    lon: 110.4251023
+    osm_node: 257677315
+  - id: simpang_pekojan_petudungan
+    label: "Simpang Jl. Pekojan × Jl. Petudungan"
+    lat: -6.9742842
+    lon: 110.4283151
+    osm_node: 266525253
+  - id: simpang_petudungan_haryono
+    label: "Simpang Jl. Petudungan × Jl. M.T. Haryono"
+    lat: -6.9744825
+    lon: 110.4312024
+    osm_node: 79428883
+  - id: simpang_haryono_dargo
+    label: "Simpang Jl. M.T. Haryono × Jl. Dargo"
+    lat: -6.9762155
+    lon: 110.4312476
+    osm_node: 2354309967
+  - id: simpang_cipto_bugangan
+    label: "Simpang Jl. Dokter Cipto × Jl. Bugangan"
+    lat: -6.9760724
+    lon: 110.4349887
+    osm_node: 1315839987
+  - id: simpang_bugangan_kanalsari
+    label: "Simpang Jl. Bugangan × Jl. Kanalsari Barat I"
+    lat: -6.9751422
+    lon: 110.4375241
+    osm_node: 7284165786
+  - id: simpang_kanalsari_tirtoyoso
+    label: "Simpang Jl. Kanalsari Raya × Jl. Tirtoyoso Batas"
+    lat: -6.9768122
+    lon: 110.4387697
+    osm_node: 5430893265
+  - id: pasar_johar_relokasi
+    label: "Akses Relokasi Pasar Johar (Jl. Barito × Jl. Tirtoyoso V)"
+    lat: -6.9787493
+    lon: 110.4411586
+    osm_node: 2087600687
+
+edges:
+  - id: e01
+    from: pos_damkar_madukoro
+    to: simpang_madukoro_v
+    weight: 0.13
+    road: "Jl. Madukoro V"
+    distance_m: 44
+  - id: e02
+    from: simpang_madukoro_v
+    to: simpang_madukoro_cokrokembang
+    weight: 0.09
+    road: "Jl. Madukoro III"
+    distance_m: 21
+  - id: e03
+    from: simpang_madukoro_v
+    to: simpang_madukoro_east
+    weight: 0.4
+    road: "Jl. Madukoro III"
+    distance_m: 99
+  - id: e04
+    from: simpang_madukoro_cokrokembang
+    to: simpang_cokrokembang_sudirman
+    weight: 0.73
+    road: "Jl. Cokrokembang"
+    distance_m: 183
+  - id: e05
+    from: simpang_cokrokembang_sudirman
+    to: simpang_sudirman_soegiyopranoto
+    weight: 0.42
+    road: "Jl. Jendral Sudirman"
+    distance_m: 244
+  - id: e06
+    from: simpang_sudirman_soegiyopranoto
+    to: simpang_soegiyopranoto_sutomo
+    weight: 1.6
+    road: "Jl. MGR Soegiyopranoto - Jl. MGR. Sugiopranoto"
+    distance_m: 933
+  - id: e07
+    from: simpang_soegiyopranoto_sutomo
+    to: simpang_sutomo_pandanaran
+    weight: 0.07
+    road: "Jl. Dokter Sutomo"
+    distance_m: 40
+  - id: e08
+    from: simpang_sutomo_pandanaran
+    to: simpang_pandanaran_kyaisaleh
+    weight: 0.91
+    road: "Jl. Pandanaran"
+    distance_m: 528
+  - id: e09
+    from: simpang_pandanaran_kyaisaleh
+    to: simpang_kyaisaleh_pekunden
+    weight: 0.02
+    road: "Jl. Kyai Saleh"
+    distance_m: 11
+  - id: e10
+    from: simpang_kyaisaleh_pekunden
+    to: simpang_pekunden_batan
+    weight: 0.32
+    road: "Jl. Pekunden"
+    distance_m: 188
+  - id: e11
+    from: simpang_pekunden_batan
+    to: simpang_batan_panjaitan
+    weight: 0.66
+    road: "Jl. Batan Selatan"
+    distance_m: 388
+  - id: e12
+    from: simpang_batan_panjaitan
+    to: simpang_panjaitan_haryono
+    weight: 2.65
+    road: "Jl. Mayjend. D.I. Panjaitan"
+    distance_m: 1545
+  - id: e13
+    from: simpang_panjaitan_haryono
+    to: simpang_kartini_barito
+    weight: 1.56
+    road: "Jl. Kartini"
+    distance_m: 911
+  - id: e14
+    from: simpang_kartini_barito
+    to: simpang_barito_tirtoyoso
+    weight: 1.06
+    road: "Jl. Barito"
+    distance_m: 532
+  - id: e15
+    from: simpang_barito_tirtoyoso
+    to: simpang_tirtoyoso_xi
+    weight: 0.29
+    road: "Jl. Tirtoyoso XI"
+    distance_m: 96
+  - id: e16
+    from: simpang_tirtoyoso_xi
+    to: simpang_tirtoyoso_batas
+    weight: 0.8
+    road: "Jl. Tirtoyoso Batas"
+    distance_m: 268
+  - id: e17
+    from: simpang_tirtoyoso_batas
+    to: pasar_johar_relokasi
+    weight: 0.62
+    road: "Jl. Tirtoyoso V"
+    distance_m: 208
+  - id: e18
+    from: simpang_barito_tirtoyoso
+    to: pasar_johar_relokasi
+    weight: 0.52
+    road: "Jl. Barito"
+    distance_m: 260
+  - id: e19
+    from: simpang_panjaitan_haryono
+    to: simpang_haryono_dargo
+    weight: 1.75
+    road: "Jl. M.T. Haryono"
+    distance_m: 1021
+  - id: e20
+    from: simpang_madukoro_east
+    to: simpang_madukoro_sudirman
+    weight: 0.48
+    road: "Jl. Madukoro - Jl. Madukoro I"
+    distance_m: 234
+  - id: e21
+    from: simpang_madukoro_sudirman
+    to: simpang_sudirman_soegiyopranoto2
+    weight: 0.02
+    road: "Jl. Jendral Sudirman"
+    distance_m: 12
+  - id: e22
+    from: simpang_sudirman_soegiyopranoto2
+    to: simpang_soegiyopranoto_indraprasta
+    weight: 0.23
+    road: "Jl. MGR Soegiyopranoto"
+    distance_m: 132
+  - id: e23
+    from: simpang_soegiyopranoto_indraprasta
+    to: simpang_indraprasta_tendean
+    weight: 1.83
+    road: "Jl. Indraprasta"
+    distance_m: 1070
+  - id: e24
+    from: simpang_indraprasta_tendean
+    to: simpang_tendean_pemuda
+    weight: 0.8
+    road: "Jl. Kapten Piere Tendean"
+    distance_m: 465
+  - id: e25
+    from: simpang_tendean_pemuda
+    to: simpang_depok_wahidhasyim
+    weight: 1.1
+    road: "Jl. Pemuda - Jl. MH. Thamrin - Jl. Depok"
+    distance_m: 566
+  - id: e26
+    from: simpang_depok_wahidhasyim
+    to: simpang_wahidhasyim_warung
+    weight: 1.07
+    road: "Jl. KH. Wahid Hasyim"
+    distance_m: 535
+  - id: e27
+    from: simpang_wahidhasyim_warung
+    to: simpang_pekojan_petudungan
+    weight: 0.85
+    road: "Jl. Gang Warung - Jl. Gang Pinggir - Jl. Pekojan"
+    distance_m: 416
+  - id: e28
+    from: simpang_pekojan_petudungan
+    to: simpang_petudungan_haryono
+    weight: 0.96
+    road: "Jl. Petudungan"
+    distance_m: 322
+  - id: e29
+    from: simpang_petudungan_haryono
+    to: simpang_haryono_dargo
+    weight: 0.33
+    road: "Jl. M.T. Haryono"
+    distance_m: 193
+  - id: e30
+    from: simpang_haryono_dargo
+    to: simpang_cipto_bugangan
+    weight: 0.99
+    road: "Jl. Dargo - Jl. Dokter Cipto"
+    distance_m: 466
+  - id: e31
+    from: simpang_cipto_bugangan
+    to: simpang_bugangan_kanalsari
+    weight: 0.6
+    road: "Jl. Bugangan"
+    distance_m: 298
+  - id: e32
+    from: simpang_bugangan_kanalsari
+    to: simpang_kanalsari_tirtoyoso
+    weight: 0.87
+    road: "Jl. Kanalsari Barat I - Jl. Kanalsari Raya"
+    distance_m: 290
+  - id: e33
+    from: simpang_kanalsari_tirtoyoso
+    to: simpang_tirtoyoso_batas
+    weight: 0.65
+    road: "Jl. Tirtoyoso Batas"
+    distance_m: 217
+
+simulation:
+  title: "Pos Damkar Madukoro ke Relokasi Pasar Johar (Semarang, 2 Februari 2022)"
+  start: pos_damkar_madukoro
+  goal: pasar_johar_relokasi
+  blocked_edges: []
+  closure_edge: e14
+  closure_description: "Kerumunan warga yang menonton memadati akses utara Jl. Barito (ruas simpang Kartini menuju pasar); akses damkar lewat Jl. Barito terputus sehingga armada harus memutar ke koridor selatan."

@@ -10,7 +10,8 @@ from .dijkstra import dijkstra, reroute_after_closure
 from .graph import Edge, Graph
 from .io import load_scenario
 
-DEFAULT_SCENARIO = Path(__file__).resolve().parents[2] / "data" / "pasar_johar_demo.yaml"
+DEMO_SCENARIO = Path(__file__).resolve().parents[2] / "data" / "pasar_johar_demo.yaml"
+DEFAULT_SCENARIO = Path(__file__).resolve().parents[2] / "data" / "pasar_johar_damkar.yaml"
 WIDTH = 78
 
 
@@ -77,11 +78,14 @@ def run_simulation(scenario_path: str | Path = DEFAULT_SCENARIO) -> int:
         _print_field("Status", "Rute alternatif berhasil ditemukan")
 
     _print_section("CATATAN DATA")
-    note = (
-        "Graf dan pembagian bobot tiap ruas merupakan model demonstrasi berdasarkan "
-        "screenshot peta. Total durasi diselaraskan dengan angka yang tampak pada peta; "
-        "bukan hasil pengukuran GIS atau waktu aktual masing-masing ruas. Validasi "
-        "topologi dan ruas penutupan tetap diperlukan."
+    note = str(
+        metadata.get(
+            "data_note",
+            "Graf dan pembagian bobot tiap ruas merupakan model demonstrasi berdasarkan "
+            "screenshot peta. Total durasi diselaraskan dengan angka yang tampak pada peta; "
+            "bukan hasil pengukuran GIS atau waktu aktual masing-masing ruas. Validasi "
+            "topologi dan ruas penutupan tetap diperlukan.",
+        )
     )
     _print_wrapped(note, indent="  ", width=WIDTH - 2)
     print("\nSimulasi selesai.\n")
@@ -142,6 +146,7 @@ def _print_wrapped(content: str, indent: str, width: int) -> None:
 
 def _print_route(title: str, graph: Graph, nodes: list[str], cost: float, unit_label: str) -> None:
     _print_section(title)
+    streets: list[str] = []
     for index, node_id in enumerate(nodes):
         label = graph.nodes.get(node_id, node_id)
         print(f"  {index + 1:02d}. {label}")
@@ -151,7 +156,12 @@ def _print_route(title: str, graph: Graph, nodes: list[str], cost: float, unit_l
             incoming = _find_edge_between(graph, nodes[index - 1], node_id)
             if incoming:
                 edge_id, weight, road_name = incoming
-                detail = f"Lewat {edge_id} · {weight:g} {unit_label}"
+                if road_name:
+                    detail = f"Lewat {edge_id} · {road_name} · {weight:g} {unit_label}"
+                    if road_name not in streets:
+                        streets.append(road_name)
+                else:
+                    detail = f"Lewat {edge_id} · {weight:g} {unit_label}"
                 for detail_line in textwrap.wrap(detail, width=WIDTH - 9):
                     print("       " + detail_line)
         if index < len(nodes) - 1:
@@ -159,6 +169,10 @@ def _print_route(title: str, graph: Graph, nodes: list[str], cost: float, unit_l
             print("       ▼")
     print("\n  Total bobot : " + f"{cost:g} {unit_label}")
     print(f"  Jumlah ruas : {max(0, len(nodes) - 1)}")
+    if streets:
+        print("\n  JALUR DAMKAR (urutan jalan yang dilalui)")
+        sequence = "  ->  ".join(streets)
+        _print_wrapped(sequence, indent="    ", width=WIDTH - 2)
 
 
 def _find_edge(graph: Graph, edge_id: str) -> tuple[str, Edge] | None:
