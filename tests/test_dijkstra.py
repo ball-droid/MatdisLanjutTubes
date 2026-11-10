@@ -337,3 +337,50 @@ def test_both_project_scenarios_pass_validation():
         assert graph.has_node(scenario["goal"])
         assert scenario["closure_edge"] in graph.edge_ids
         assert len(graph.edge_ids) > 0
+
+
+# --- Penelusuran rute dan skenario penutupan (tahap algoritma) ---
+
+
+def test_route_edges_trace_nodes_and_sum_to_cost():
+    """Tiap rute mencatat ruas yang dilalui; jumlah bobotnya = total rute."""
+    for path in (DEFAULT_SCENARIO, DEMO_SCENARIO):
+        graph, scenario = load_scenario(path)
+        result = dijkstra(graph, scenario["start"], scenario["goal"])
+        assert result is not None
+        assert len(result.edges) == len(result.nodes) - 1
+        total = 0.0
+        for source, target, edge_id in zip(
+            result.nodes, result.nodes[1:], result.edges
+        ):
+            edge = next(
+                e for e in graph.neighbors(source)
+                if e.target == target and e.edge_id == edge_id
+            )
+            total += edge.weight
+        assert total == pytest.approx(result.cost)
+
+
+def test_closing_unknown_edge_is_rejected():
+    with pytest.raises(ValueError, match="tidak dikenal"):
+        dijkstra(make_graph(), "A", "D", {"bukan_edge"})
+    with pytest.raises(ValueError, match="tidak dikenal"):
+        reroute_after_closure(make_graph(), "A", "D", {"bukan_edge"})
+
+
+def test_closure_that_disconnects_goal_returns_none():
+    """Bila penutupan memutus akses, program harus melaporkan tanpa rute."""
+    graph = Graph()
+    for node in ("A", "B", "C"):
+        graph.add_node(node)
+    graph.add_edge("A", "B", 1, "ab")
+    graph.add_edge("B", "C", 1, "bc")
+    assert dijkstra(graph, "A", "C") is not None
+    assert reroute_after_closure(graph, "A", "C", {"bc"}) is None
+
+
+def test_zero_length_route_has_no_edges():
+    result = dijkstra(make_graph(), "A", "A")
+    assert result is not None
+    assert result.edges == []
+    assert result.cost == 0
