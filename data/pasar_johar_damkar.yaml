@@ -24,6 +24,12 @@
 # akses jalan menuju pasar, sehingga kendaraan damkar sulit menembus (Ganjar Pranowo
 # sempat menegur warga yang menutup jalan).
 # Peta jalan: OpenStreetMap contributors (ODbL).
+#
+# Status akses: hanya ruas yang menjadi objek hambatan yang memakai field
+# access_status; edge tanpa field tersebut diasumsikan terbuka (asumsi model).
+# Verifikasi 2026-11-10 dengan tools/validasi_peta.py: 31/31 node dan 28/28 nama
+# ruas cocok dengan OpenStreetMap; keputusan arah graf dijelaskan pada metadata
+# (direction_note) dan docs/analisis_studi_kasus.md.
 
 metadata:
   case_id: "pasar_johar_2022_damkar_jaringan_jalan_asli"
@@ -40,6 +46,43 @@ metadata:
   edge_count: 33
   weight_rule: "menit = jarak_meter / (kecepatan_model km/jam) x 60; utama 35, sekunder 30, permukiman 20"
   display_weight_unit: "menit estimasi"
+  weight_basis:
+    formula: "menit = distance_m * 60 / (kecepatan_km_per_jam * 1000)"
+    nominal_speed_kmh:
+      utama: 35
+      sekunder: 30
+      permukiman: 20
+    outliers: ["e02", "e03", "e04", "e25", "e27", "e30"]
+    outlier_note: >-
+      Enam ruas ini bobotnya menyimpang dari kecepatan nominal di atas
+      (kecepatan tersirat 14-31 km/jam, selisih bobot maksimal 0.06 menit
+      terhadap rumus). Angka tetap dipertahankan sebagai estimasi model;
+      penyimpangan dicatat supaya dapat ditinjau, bukan dikoreksi diam-diam
+      karena tidak ada pengukuran waktu tempuh yang menjadi rujukan.
+  graph_type: "tidak berarah (dua arah) - semua edge boleh dilalui dua arah pada model ini"
+  direction_note: >-
+    Keputusan arah diverifikasi terhadap OpenStreetMap (tools/validasi_peta.py,
+    ekstraksi 2026-11-10): 14 dari 33 edge berada di ruas yang benar-benar dua
+    arah, 19 edge berada di ruas satu arah. Penerapan aturan satu arah apa
+    adanya diuji (tools/eksperimen_arah.py) dan membuat rute awal maupun
+    alternatif putus, sehingga graf tetap tidak berarah sebagai penyederhanaan
+    yang terdokumentasi - bukan klaim bahwa jalan tersebut dua arah. Loader
+    sudah mendukung directed: true per edge bila verifikasi arah selesai.
+  verification:
+    checked_on: "2026-11-10"
+    node_osm_match: "31/31 node ada di OpenStreetMap dan koordinatnya cocok"
+    road_name_match: "28/28 nama ruas cocok dengan nama jalan OpenStreetMap"
+    graph_connected: "satu komponen; semua node terjangkau dari titik awal dan dapat mencapai tujuan"
+  not_verified:
+    - "aturan satu arah yang berlaku pada 2 Februari 2022"
+    - "posisi persimpangan persis pada peta resmi (koordinat sudah ada, belum diperiksa satu per satu)"
+    - "waktu tempuh aktual tiap ruas (tidak tersedia dalam sumber berita)"
+    - "keberadaan seluruh simpang pemutar yang diperlukan bila aturan satu arah diterapkan"
+  fact_boundary:
+    from_news: "kebakaran di Pasar Johar Relokasi blok F pada 2 Februari 2022; kerumunan warga membuat akses jalan menuju pasar macet dan menyulitkan damkar"
+    from_map_model: "titik awal, titik tujuan, topologi jaringan, nama ruas, koordinat, dan bobot per ruas"
+    not_available_in_news: "jumlah unit damkar, jumlah petugas, waktu kedatangan, kapasitas air, jumlah hidran, lebar jalan, koordinat presisi, waktu tempuh per ruas"
+  origin_destination_source: "OpenStreetMap (titik awal Dinas Pemadam Kebakaran Kota Semarang) dan peta akses pasar; BUKAN dari berita - berita tidak menyebut pos pemadam maupun rute"
   data_note: "Node dan ruas berasal dari jaringan jalan nyata di sekitar lokasi berita (OpenStreetMap, ekstraksi 2026-11-10), disederhanakan menjadi simpang-simpang utama. Bobot dihitung dari jarak peta dibagi kecepatan model (35/30/20 km/jam), sehingga angkanya menit estimasi - bukan waktu tempuh terukur atau kondisi lalu lintas pada 2 Februari 2022. Posisi persimpangan persis tetap perlu dicek ulang pada peta resmi sebelum dipakai untuk laporan final."
   source_articles:
     - "https://semarang.bisnis.com/read/20220202/535/1496092/relokasi-pasar-johar-terbakar-ganjar-minta-pedagang-diprioritaskan"
@@ -287,6 +330,7 @@ edges:
     weight: 1.06
     road: "Jl. Barito"
     distance_m: 532
+    access_status: "rawan terhambat kerumunan (event simulasi sesuai berita 2 Februari 2022)"
   - id: e15
     from: simpang_barito_tirtoyoso
     to: simpang_tirtoyoso_xi

@@ -29,6 +29,12 @@ metadata:
     - "https://semarang.bisnis.com/read/20220202/535/1496092/relokasi-pasar-johar-terbakar-ganjar-minta-pedagang-diprioritaskan"
     - "https://jateng.antaranews.com/berita/431073/kerumunan-warga-sulitkan-pemadaman-kebakaran-pasar-johar-relokasi"
   map_model_note: "Topologi disederhanakan berdasarkan screenshot rute dan anotasi; verifikasi jalan/edge tetap diperlukan."
+  graph_type: "tidak berarah (dua arah) - arah lalu lintas tidak diketahui karena skenario ini berbasis screenshot, bukan data peta"
+  fact_boundary:
+    from_news: "kebakaran di Pasar Johar Relokasi blok F pada 2 Februari 2022; kerumunan warga menghambat akses damkar"
+    from_map_model: "titik awal Pos Pemadam Barito, titik tujuan Blok F, topologi ruas, dan angka durasi 9/10 menit"
+    not_available_in_news: "jumlah unit damkar, jumlah petugas, waktu kedatangan, kapasitas air, jumlah hidran, lebar jalan, koordinat presisi, waktu tempuh per ruas"
+  verification: "belum diverifikasi terhadap peta resmi; topologi berasal dari screenshot beresolusi terbatas"
 
 nodes:
   - id: pos_damkar_barito
@@ -81,6 +87,7 @@ edges:
     to: akses_selatan_pasar
     weight: 1.5
     road: "Segmen akses masuk yang diasumsikan terhambat kerumunan warga dan motor parkir"
+    access_status: "tertutup kerumunan warga (event simulasi sesuai berita 2 Februari 2022)"
   - id: e06
     from: akses_selatan_pasar
     to: titik_kebakaran_blok_f
