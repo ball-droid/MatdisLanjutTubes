@@ -203,3 +203,137 @@ def test_damkar_simulation_runs_and_prints_damkar_route(capsys):
     assert "JALUR DAMKAR" in output
     assert "Jl. Pandanaran" in output
     assert "Rute alternatif berhasil ditemukan" in output
+
+
+# --- Validasi struktur graf dan data skenario ---
+
+
+def _write_scenario(tmp_path, text):
+    path = tmp_path / "case.yaml"
+    path.write_text(text, encoding="utf-8")
+    return path
+
+
+VALID_SCENARIO = """
+nodes:
+  - id: A
+    label: "A"
+  - id: B
+    label: "B"
+edges:
+  - id: ab
+    from: A
+    to: B
+    weight: 1
+simulation:
+  title: "kasus uji"
+  start: A
+  goal: B
+  blocked_edges: []
+  closure_edge: ab
+"""
+
+
+def test_graph_rejects_duplicate_node_id():
+    graph = Graph()
+    graph.add_node("A")
+    with pytest.raises(ValueError, match="duplikat"):
+        graph.add_node("A")
+
+
+def test_graph_rejects_non_finite_weight():
+    graph = Graph()
+    graph.add_node("A")
+    graph.add_node("B")
+    with pytest.raises(ValueError, match="finite"):
+        graph.add_edge("A", "B", float("nan"), "nan_edge")
+    with pytest.raises(ValueError, match="finite"):
+        graph.add_edge("A", "B", float("inf"), "inf_edge")
+
+
+def test_graph_rejects_unknown_node_and_empty_edge_id():
+    graph = Graph()
+    graph.add_node("A")
+    with pytest.raises(ValueError, match="tidak dikenal"):
+        graph.add_edge("A", "Z", 1, "az")
+    graph.add_node("B")
+    with pytest.raises(ValueError, match="ID edge"):
+        graph.add_edge("A", "B", 1, "")
+
+
+def test_graph_rejects_non_boolean_directed_flag():
+    graph = Graph()
+    graph.add_node("A")
+    graph.add_node("B")
+    with pytest.raises(ValueError, match="boolean"):
+        graph.add_edge("A", "B", 1, "ab", directed="ya")  # type: ignore[arg-type]
+
+
+def test_loader_reports_missing_file(tmp_path):
+    with pytest.raises(FileNotFoundError, match="tidak ditemukan"):
+        load_scenario(tmp_path / "tidak_ada.yaml")
+
+
+def test_loader_rejects_duplicate_node_id(tmp_path):
+    text = VALID_SCENARIO.replace("  - id: B\n    label: \"B\"\n", "  - id: A\n    label: \"duplikat\"\n")
+    with pytest.raises(ValueError, match="duplikat"):
+        load_scenario(_write_scenario(tmp_path, text))
+
+
+def test_loader_rejects_negative_and_non_numeric_weight(tmp_path):
+    negative = VALID_SCENARIO.replace("weight: 1", "weight: -1")
+    with pytest.raises(ValueError, match="non-negatif"):
+        load_scenario(_write_scenario(tmp_path, negative))
+    teks = VALID_SCENARIO.replace("weight: 1", "weight: \"satu\"")
+    with pytest.raises(ValueError, match="angka"):
+        load_scenario(_write_scenario(tmp_path, teks))
+
+
+def test_loader_rejects_unknown_start_goal_and_closure(tmp_path):
+    salah_goal = VALID_SCENARIO.replace("goal: B", "goal: Z")
+    with pytest.raises(ValueError, match="Node goal"):
+        load_scenario(_write_scenario(tmp_path, salah_goal))
+    salah_closure = VALID_SCENARIO.replace("closure_edge: ab", "closure_edge: xy")
+    with pytest.raises(ValueError, match="closure_edge"):
+        load_scenario(_write_scenario(tmp_path, salah_closure))
+    salah_block = VALID_SCENARIO.replace("blocked_edges: []", "blocked_edges: [xy]")
+    with pytest.raises(ValueError, match="blocked_edges"):
+        load_scenario(_write_scenario(tmp_path, salah_block))
+
+
+def test_loader_rejects_scenario_without_simulation_block(tmp_path):
+    text = VALID_SCENARIO.split("simulation:")[0]
+    with pytest.raises(ValueError, match="simulation"):
+        load_scenario(_write_scenario(tmp_path, text))
+
+
+def test_loader_rejects_incomplete_map_fields(tmp_path):
+    text = VALID_SCENARIO.replace(
+        "  - id: A\n    label: \"A\"\n",
+        "  - id: A\n    label: \"A\"\n    lat: -6.9\n    lon: 110.4\n",
+    )
+    with pytest.raises(ValueError, match="Field peta"):
+        load_scenario(_write_scenario(tmp_path, text))
+
+
+def test_loader_rejects_bad_access_status_and_directed_type(tmp_path):
+    bad_status = VALID_SCENARIO.replace(
+        "    weight: 1\n", "    weight: 1\n    access_status: \"  \"\n"
+    )
+    with pytest.raises(ValueError, match="access_status"):
+        load_scenario(_write_scenario(tmp_path, bad_status))
+    bad_directed = VALID_SCENARIO.replace(
+        "    weight: 1\n", "    weight: 1\n    directed: \"ya\"\n"
+    )
+    with pytest.raises(ValueError, match="directed"):
+        load_scenario(_write_scenario(tmp_path, bad_directed))
+
+
+def test_both_project_scenarios_pass_validation():
+    """Skenario resmi proyek harus lolos seluruh pemeriksaan struktur."""
+    for path in (DEFAULT_SCENARIO, DEMO_SCENARIO):
+        graph, scenario = load_scenario(path)
+        assert graph.has_node(scenario["start"])
+        assert graph.has_node(scenario["goal"])
+        assert scenario["closure_edge"] in graph.edge_ids
+        assert len(graph.edge_ids) > 0
