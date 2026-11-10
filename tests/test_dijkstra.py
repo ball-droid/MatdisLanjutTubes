@@ -384,3 +384,112 @@ def test_zero_length_route_has_no_edges():
     assert result is not None
     assert result.edges == []
     assert result.cost == 0
+
+
+# --- Pengujian akhir: keluaran simulasi, skenario tanpa alternatif, benchmark ---
+
+
+def test_simulation_lists_every_node_and_edge(capsys):
+    from pathfinding.simulation import run_simulation
+
+    assert run_simulation(DEFAULT_SCENARIO) == 0
+    output = capsys.readouterr().out
+    graph, _ = load_scenario(DEFAULT_SCENARIO)
+    assert "DAFTAR NODE (31 node)" in output
+    assert "DAFTAR RUAS JALAN (33 ruas)" in output
+    for node_id in graph.nodes:
+        assert node_id in output, node_id
+    for edge_id in graph.edge_ids:
+        assert edge_id in output, edge_id
+
+
+def test_simulation_prints_sources_and_fact_boundary(capsys):
+    from pathfinding.simulation import run_simulation
+
+    assert run_simulation(DEFAULT_SCENARIO) == 0
+    output = capsys.readouterr().out
+    assert "SUMBER BERITA DAN BATAS DATA" in output
+    assert "semarang.bisnis.com" in output
+    assert "jateng.antaranews.com" in output
+    assert "Tidak tersedia dalam berita" in output
+    assert "CATATAN VALIDITAS DATA" in output
+    assert "Belum diverifikasi" in output
+
+
+def test_simulation_reports_missing_alternative_route(tmp_path, capsys):
+    """Skenario tanpa jalur alternatif harus dilaporkan, bukan dianggap berhasil."""
+    from pathfinding.simulation import run_simulation
+
+    path = tmp_path / "putus.yaml"
+    path.write_text(
+        """
+nodes:
+  - {id: A, label: "A"}
+  - {id: B, label: "B"}
+  - {id: C, label: "C"}
+edges:
+  - {id: ab, from: A, to: B, weight: 1, road: "Jl. AB"}
+  - {id: bc, from: B, to: C, weight: 1, road: "Jl. BC"}
+simulation:
+  title: "kasus putus"
+  start: A
+  goal: C
+  blocked_edges: []
+  closure_edge: bc
+  closure_description: "ruas satu-satunya menuju tujuan"
+""",
+        encoding="utf-8",
+    )
+    assert run_simulation(path) == 1
+    output = capsys.readouterr().out
+    assert "Tidak ada rute alternatif setelah ruas bc ditutup" in output
+
+
+def test_simulation_reports_missing_initial_route(tmp_path, capsys):
+    from pathfinding.simulation import run_simulation
+
+    path = tmp_path / "terpisah.yaml"
+    path.write_text(
+        """
+nodes:
+  - {id: A, label: "A"}
+  - {id: B, label: "B"}
+  - {id: C, label: "C"}
+edges:
+  - {id: ab, from: A, to: B, weight: 1}
+simulation:
+  title: "dua komponen"
+  start: A
+  goal: C
+  blocked_edges: []
+""",
+        encoding="utf-8",
+    )
+    assert run_simulation(path) == 1
+    output = capsys.readouterr().out
+    assert "Rute tidak ditemukan dari titik awal ke tujuan" in output
+
+
+def test_simulation_runs_for_demo_scenario(capsys):
+    from pathfinding.simulation import run_simulation
+
+    assert run_simulation(DEMO_SCENARIO) == 0
+    output = capsys.readouterr().out
+    assert "pos_damkar_barito" in output
+    assert "e05" in output
+
+
+def test_benchmark_measures_dijkstra_on_default_scenario():
+    from pathfinding.benchmark import benchmark
+
+    result = benchmark(DEFAULT_SCENARIO, repeats=20)
+    assert result["repeats"] == 20
+    assert result["mean_ms"] >= 0
+    assert result["min_ms"] <= result["max_ms"]
+
+
+def test_benchmark_rejects_non_positive_repeats():
+    from pathfinding.benchmark import benchmark
+
+    with pytest.raises(ValueError, match="pengulangan"):
+        benchmark(DEFAULT_SCENARIO, repeats=0)
