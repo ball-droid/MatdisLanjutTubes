@@ -4,10 +4,9 @@ from __future__ import annotations
 import argparse
 import textwrap
 from pathlib import Path
-from typing import Iterable
 
-from .dijkstra import dijkstra, reroute_after_closure
-from .graph import Edge, Graph
+from .dijkstra import PathResult, dijkstra, reroute_after_closure
+from .graph import Graph
 from .io import load_scenario
 
 DEMO_SCENARIO = Path(__file__).resolve().parents[2] / "data" / "pasar_johar_demo.yaml"
@@ -22,72 +21,81 @@ def run_simulation(scenario_path: str | Path = DEFAULT_SCENARIO) -> int:
     if not start or not goal:
         raise ValueError("Skenario harus menetapkan start dan goal.")
 
-    metadata = scenario.get("metadata", {})
+    metadata = scenario.get("metadata", {}) or {}
     unit_label = metadata.get("display_weight_unit", "unit simulasi")
-    edge_count = len({edge.edge_id for node_id in graph.nodes for edge in graph.neighbors(node_id)})
+    access_status = scenario.get("access_status", {}) or {}
+    catalog = _edge_catalog(graph)
+
+    initial = dijkstra(graph, start, goal, blocked)
+    closure_edge = str(scenario.get("closure_edge") or "")
+    updated = (
+        reroute_after_closure(graph, start, goal, {closure_edge} | blocked)
+        if closure_edge
+        else None
+    )
 
     _print_header(
         title=str(metadata.get("title", scenario.get("title", "Simulasi Pathfinding"))),
         location=str(metadata.get("location", "Tidak dicantumkan")),
         event_date=_format_date(str(metadata.get("event_date", "Tidak dicantumkan"))),
         node_count=len(graph.nodes),
-        edge_count=edge_count,
+        edge_count=len(catalog),
     )
-    _print_section("KONFIGURASI SIMULASI")
+    _print_section("01  KONFIGURASI SIMULASI")
     _print_field("Titik awal", graph.nodes.get(start, start))
     _print_field("Titik tujuan", graph.nodes.get(goal, goal))
     _print_field("Algoritma", "Dijkstra (baseline / pencarian ulang penuh)")
+    _print_field("Model graf", str(metadata.get("graph_type", "tidak berarah (dua arah)")))
+    _print_field("Satuan bobot", str(unit_label))
     _print_field("Ruas tertutup sejak awal", ", ".join(sorted(blocked)) if blocked else "Tidak ada")
 
-    initial = dijkstra(graph, start, goal, blocked)
+    _print_sources(metadata)
+    _print_node_index(graph, start, goal, initial, updated)
+    _print_edge_index(catalog, access_status, unit_label)
+
     if initial is None:
-        _print_section("HASIL SIMULASI")
+        _print_section("03  RUTE AWAL")
         print("  Rute tidak ditemukan dari titik awal ke tujuan.")
         return 1
 
-    _print_route("01  RUTE AWAL", graph, initial.nodes, initial.cost, unit_label)
+    _print_route("05  RUTE AWAL", graph, initial, unit_label, catalog)
 
-    closure_edge = scenario.get("closure_edge")
     if closure_edge:
-        closure_edge = str(closure_edge)
-        description = str(scenario.get("closure_description", "Ruas ditutup untuk keperluan simulasi."))
-        edge_info = _find_edge(graph, closure_edge)
-        _print_section("EVENT: AKSES JALAN TERHAMBAT")
+        description = str(
+            scenario.get("closure_description", "Ruas ditutup untuk keperluan simulasi.")
+        )
+        _print_section("06  EVENT: AKSES JALAN TERHAMBAT")
         _print_field("ID ruas", closure_edge)
-        if edge_info:
-            source, edge = edge_info
-            target_label = graph.nodes.get(edge.target, edge.target)
-            _print_field("Ruas", f"{graph.nodes.get(source, source)} -> {target_label}")
-            _print_field("Bobot ruas", f"{edge.weight:g} {unit_label}")
+        if closure_edge in catalog:
+            source, target, weight, road = catalog[closure_edge]
+            _print_field("Ruas", f"{graph.nodes.get(source, source)} -> {graph.nodes.get(target, target)}")
+            _print_field("Keterangan ruas", road if road else "Tidak dicantumkan")
+            _print_field("Bobot ruas", f"{weight:g} {unit_label}")
+        status = access_status.get(closure_edge)
+        if status:
+            _print_field("Status akses", status)
         print("  Keterangan :")
         _print_wrapped(description, indent="    ", width=WIDTH - 4)
         print("  Tindakan   : Ruas dikecualikan dari pencarian rute berikutnya.")
 
-        updated = reroute_after_closure(graph, start, goal, {closure_edge} | blocked)
         if updated is None:
-            _print_section("HASIL SETELAH PENUTUPAN")
+            _print_section("07  HASIL SETELAH PENUTUPAN")
             print(f"  Tidak ada rute alternatif setelah ruas {closure_edge} ditutup.")
             return 1
-        _print_route("02  RUTE ALTERNATIF", graph, updated.nodes, updated.cost, unit_label)
+        _print_route("07  RUTE ALTERNATIF", graph, updated, unit_label, catalog)
         difference = updated.cost - initial.cost
         sign = "+" if difference >= 0 else ""
-        _print_section("RINGKASAN HASIL")
+        _print_section("08  RINGKASAN HASIL")
         _print_field("Rute awal", f"{initial.cost:g} {unit_label} | {len(initial.nodes) - 1} ruas")
         _print_field("Rute alternatif", f"{updated.cost:g} {unit_label} | {len(updated.nodes) - 1} ruas")
         _print_field("Perubahan bobot total", f"{sign}{difference:g} {unit_label}")
+        _print_field(
+            "Selisih ruas",
+            f"{len(updated.nodes) - len(initial.nodes):+d} ruas",
+        )
         _print_field("Status", "Rute alternatif berhasil ditemukan")
 
-    _print_section("CATATAN DATA")
-    note = str(
-        metadata.get(
-            "data_note",
-            "Graf dan pembagian bobot tiap ruas merupakan model demonstrasi berdasarkan "
-            "screenshot peta. Total durasi diselaraskan dengan angka yang tampak pada peta; "
-            "bukan hasil pengukuran GIS atau waktu aktual masing-masing ruas. Validasi "
-            "topologi dan ruas penutupan tetap diperlukan.",
-        )
-    )
-    _print_wrapped(note, indent="  ", width=WIDTH - 2)
+    _print_data_notes(metadata)
     print("\nSimulasi selesai.\n")
     return 0
 
@@ -144,30 +152,101 @@ def _print_wrapped(content: str, indent: str, width: int) -> None:
         print(indent + line)
 
 
-def _print_route(title: str, graph: Graph, nodes: list[str], cost: float, unit_label: str) -> None:
+def _edge_catalog(graph: Graph) -> dict[str, tuple[str, str, float, str]]:
+    """Pemetaan ID ruas -> (asal, tujuan, bobot, nama jalan) sesuai urutan YAML."""
+    catalog: dict[str, tuple[str, str, float, str]] = {}
+    for source in graph.nodes:
+        for edge in graph.neighbors(source):
+            catalog.setdefault(edge.edge_id, (source, edge.target, edge.weight, edge.road_name))
+    return catalog
+
+
+def _print_sources(metadata: dict) -> None:
+    _print_section("02  SUMBER BERITA DAN BATAS DATA")
+    articles = metadata.get("source_articles") or []
+    if isinstance(articles, list) and articles:
+        for index, url in enumerate(articles, start=1):
+            _print_field(f"Sumber berita {index}", str(url))
+    else:
+        _print_field("Sumber berita", "Tidak dicantumkan")
+
+    boundary = metadata.get("fact_boundary") or {}
+    if isinstance(boundary, dict) and boundary:
+        _print_field("Fakta dari berita", str(boundary.get("from_news", "Tidak dicantumkan")))
+        _print_field("Model peta / simulasi", str(boundary.get("from_map_model", "Tidak dicantumkan")))
+        _print_field(
+            "Tidak tersedia dalam berita",
+            str(boundary.get("not_available_in_news", "Tidak dicantumkan")),
+        )
+    else:
+        _print_field("Fakta dari berita", str(metadata.get("reported_fact", "Tidak dicantumkan")))
+
+
+def _node_role(node_id: str, start: str, goal: str,
+               initial: PathResult | None, alternate: PathResult | None) -> str:
+    """Peran node dalam konteks rute damkar pada skenario yang sedang dijalankan."""
+    roles: list[str] = []
+    if node_id == start:
+        roles.append("titik awal")
+    if node_id == goal:
+        roles.append("tujuan")
+    if initial and node_id in initial.nodes:
+        roles.append("dilalui rute awal")
+    if alternate and node_id in alternate.nodes:
+        roles.append("dilalui rute alternatif")
+    return ", ".join(roles) if roles else "jaringan pendukung (belum dilalui rute)"
+
+
+def _print_node_index(graph: Graph, start: str, goal: str,
+                      initial: PathResult | None, alternate: PathResult | None) -> None:
+    _print_section(f"03  DAFTAR NODE ({len(graph.nodes)} node)")
+    for index, (node_id, label) in enumerate(graph.nodes.items(), start=1):
+        role = _node_role(node_id, start, goal, initial, alternate)
+        print(f"  {index:02d}. {node_id} · {role}")
+        if label != node_id:
+            _print_wrapped(label, indent="       ", width=WIDTH - 2)
+
+
+def _print_edge_index(catalog: dict[str, tuple[str, str, float, str]],
+                      access_status: dict[str, str], unit_label: str) -> None:
+    _print_section(f"04  DAFTAR RUAS JALAN ({len(catalog)} ruas)")
+    for edge_id in sorted(catalog):
+        source, target, weight, road = catalog[edge_id]
+        print(f"  {edge_id} · {source} -> {target}")
+        detail = f"{weight:g} {unit_label}" + (f" · {road}" if road else "")
+        _print_wrapped(detail, indent="       ", width=WIDTH - 2)
+        status = access_status.get(edge_id)
+        if status:
+            _print_wrapped(f"status akses: {status}", indent="       ", width=WIDTH - 2)
+
+
+def _print_route(title: str, graph: Graph, result: PathResult,
+                 unit_label: str, catalog: dict[str, tuple[str, str, float, str]]) -> None:
     _print_section(title)
     streets: list[str] = []
+    nodes = result.nodes
     for index, node_id in enumerate(nodes):
         label = graph.nodes.get(node_id, node_id)
         print(f"  {index + 1:02d}. {label}")
+        if index > 0:
+            edge_id = result.edges[index - 1]
+            _, _, weight, road_name = catalog[edge_id]
+            if road_name:
+                detail = f"Lewat {edge_id} · {road_name} · {weight:g} {unit_label}"
+                if road_name not in streets:
+                    streets.append(road_name)
+            else:
+                detail = f"Lewat {edge_id} · {weight:g} {unit_label}"
+            for detail_line in textwrap.wrap(detail, width=WIDTH - 9):
+                print("       " + detail_line)
         if index == 0:
             print("       [TITIK AWAL]")
-        elif index < len(nodes):
-            incoming = _find_edge_between(graph, nodes[index - 1], node_id)
-            if incoming:
-                edge_id, weight, road_name = incoming
-                if road_name:
-                    detail = f"Lewat {edge_id} · {road_name} · {weight:g} {unit_label}"
-                    if road_name not in streets:
-                        streets.append(road_name)
-                else:
-                    detail = f"Lewat {edge_id} · {weight:g} {unit_label}"
-                for detail_line in textwrap.wrap(detail, width=WIDTH - 9):
-                    print("       " + detail_line)
+        elif index == len(nodes) - 1:
+            print("       [TUJUAN]")
         if index < len(nodes) - 1:
             print("       │")
             print("       ▼")
-    print("\n  Total bobot : " + f"{cost:g} {unit_label}")
+    print("\n  Total bobot : " + f"{result.cost:g} {unit_label}")
     print(f"  Jumlah ruas : {max(0, len(nodes) - 1)}")
     if streets:
         print("\n  JALUR DAMKAR (urutan jalan yang dilalui)")
@@ -175,19 +254,33 @@ def _print_route(title: str, graph: Graph, nodes: list[str], cost: float, unit_l
         _print_wrapped(sequence, indent="    ", width=WIDTH - 2)
 
 
-def _find_edge(graph: Graph, edge_id: str) -> tuple[str, Edge] | None:
-    for source in graph.nodes:
-        for edge in graph.neighbors(source):
-            if edge.edge_id == edge_id:
-                return source, edge
-    return None
+def _print_data_notes(metadata: dict) -> None:
+    _print_section("09  CATATAN VALIDITAS DATA")
+    note = str(
+        metadata.get(
+            "data_note",
+            "Graf dan pembagian bobot tiap ruas merupakan model demonstrasi berdasarkan "
+            "screenshot peta. Total durasi diselaraskan dengan angka yang tampak pada peta; "
+            "bukan hasil pengukuran GIS atau waktu aktual masing-masing ruas. Validasi "
+            "topologi dan ruas penutupan tetap diperlukan.",
+        )
+    )
+    _print_wrapped(note, indent="  ", width=WIDTH - 2)
 
+    verification = metadata.get("verification") or {}
+    if isinstance(verification, dict) and verification:
+        checked_on = verification.get("checked_on")
+        _print_field("Terverifikasi", f"pemeriksaan {checked_on}" if checked_on else "ada")
+        for key, value in verification.items():
+            if key == "checked_on":
+                continue
+            _print_wrapped(f"- {value}", indent="      ", width=WIDTH - 6)
 
-def _find_edge_between(graph: Graph, source: str, target: str) -> tuple[str, float, str] | None:
-    for edge in graph.neighbors(source):
-        if edge.target == target:
-            return edge.edge_id, edge.weight, edge.road_name
-    return None
+    not_verified = metadata.get("not_verified") or []
+    if isinstance(not_verified, list) and not_verified:
+        print("  Belum diverifikasi:")
+        for item in not_verified:
+            _print_wrapped(f"- {item}", indent="      ", width=WIDTH - 6)
 
 
 def main() -> None:

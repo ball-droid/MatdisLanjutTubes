@@ -37,8 +37,9 @@ def load_scenario(path: str | Path) -> tuple[Graph, dict[str, Any]]:
 
     graph = Graph()
     _load_nodes(data["nodes"], graph)
-    _load_edges(data["edges"], graph, reference_schema="execution_plan" in data)
+    access_status = _load_edges(data["edges"], graph, reference_schema="execution_plan" in data)
     scenario = _load_scenario_block(data, graph)
+    scenario["access_status"] = access_status
     return graph, scenario
 
 
@@ -66,7 +67,11 @@ def _load_nodes(items: list[Any], graph: Graph) -> None:
         )
 
 
-def _load_edges(items: list[Any], graph: Graph, reference_schema: bool) -> None:
+def _load_edges(
+    items: list[Any], graph: Graph, reference_schema: bool
+) -> dict[str, str]:
+    """Muat seluruh edge; kembalikan pemetaan ID ruas ke status aksesnya."""
+    access_status: dict[str, str] = {}
     for index, item in enumerate(items, start=1):
         if not isinstance(item, dict):
             raise ValueError(f"Setiap edge harus berupa object/dictionary (edge ke-{index}).")
@@ -77,6 +82,8 @@ def _load_edges(items: list[Any], graph: Graph, reference_schema: bool) -> None:
             )
         edge_id = str(item.get("id", f"e{index:02d}"))
         _validate_edge_fields(item, edge_id, index)
+        if "access_status" in item:
+            access_status[edge_id] = str(item["access_status"]).strip()
 
         # Skema referensi memiliki edge searah secara default (NetworkX DiGraph).
         # Skema proyek C memakai dua arah secara default kecuali directed: true.
@@ -86,6 +93,7 @@ def _load_edges(items: list[Any], graph: Graph, reference_schema: bool) -> None:
             weight=float(item["weight"]), edge_id=edge_id,
             road_name=str(item.get("road", "")), directed=directed,
         )
+    return access_status
 
 
 def _validate_edge_fields(item: dict[str, Any], edge_id: str, index: int) -> None:
