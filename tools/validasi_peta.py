@@ -58,25 +58,45 @@ def normalize_name(name: str) -> str:
 
 
 def validate_nodes(nodes: list[dict]) -> list[str]:
-    """Pastikan osm_node ada dan koordinatnya cocok dengan OSM."""
-    ids = [str(node["osm_node"]) for node in nodes]
-    query = "[out:json][timeout:60];node(id:" + ",".join(ids) + ");out body;"
-    data = overpass(query)
-    found = {str(el["id"]): el for el in data.get("elements", [])}
+    """Pastikan osm_node/osm_way ada di OSM dan koordinatnya cocok.
+
+    Node jalan memakai ``osm_node`` (elemen node); kantor damkar tambahan
+    memakai ``osm_way`` (elemen way, koordinat = pusat way, toleransi lebih
+    longgar karena pusat way dihitung ulang oleh Overpass).
+    """
+    node_ids = [str(node["osm_node"]) for node in nodes if "osm_node" in node]
+    way_ids = [str(node["osm_way"]) for node in nodes if "osm_way" in node]
+    found: dict[str, dict] = {}
+    if node_ids:
+        query = "[out:json][timeout:60];node(id:" + ",".join(node_ids) + ");out body;"
+        found.update({f"node/{el['id']}": el for el in overpass(query).get("elements", [])})
+    if way_ids:
+        query = "[out:json][timeout:60];way(id:" + ",".join(way_ids) + ");out center;"
+        found.update({f"way/{el['id']}": el for el in overpass(query).get("elements", [])})
+
+    total = len(node_ids) + len(way_ids)
+    print(f"NODE: {len(found)}/{total} ditemukan di OSM")
     problems: list[str] = []
-    print(f"NODE: {len(found)}/{len(ids)} ditemukan di OSM")
     for node in nodes:
-        element = found.get(str(node["osm_node"]))
+        key = (
+            f"node/{int(node['osm_node'])}" if "osm_node" in node
+            else f"way/{int(node['osm_way'])}"
+        )
+        element = found.get(key)
         if element is None:
-            problems.append(f"{node['id']}: osm_node {node['osm_node']} tidak ada di OSM")
+            problems.append(f"{node['id']}: {key} tidak ada di OSM")
             continue
+        lat = element.get("lat") or (element.get("center") or {}).get("lat")
+        lon = element.get("lon") or (element.get("center") or {}).get("lon")
+        tolerance = 1e-6 if key.startswith("node/") else 1e-4
         if (
-            abs(element["lat"] - node["lat"]) > 1e-6
-            or abs(element["lon"] - node["lon"]) > 1e-6
+            lat is None
+            or abs(lat - node["lat"]) > tolerance
+            or abs(lon - node["lon"]) > tolerance
         ):
             problems.append(
                 f"{node['id']}: koordinat berbeda yaml=({node['lat']},{node['lon']}) "
-                f"osm=({element['lat']},{element['lon']})"
+                f"osm=({lat},{lon})"
             )
     return problems
 
@@ -242,12 +262,27 @@ def main() -> int:
     nodes, edges = data["nodes"], data["edges"]
     print(f"File: {path}  node={len(nodes)} edge={len(edges)}")
 
-    if not all({"lat", "lon", "osm_node"} <= set(node) for node in nodes):
-        print("Skenario tanpa lat/lon/osm_node: validasi peta hanya bisa untuk skenario OSM.")
+    if not all(
+        {"lat", "lon"} <= set(node) and ("osm_node" in node or "osm_way" in node)
+        for node in nodes
+    ):
+        print("Skenario tanpa lat/lon/osm_node|osm_way: validasi peta hanya bisa untuk skenario OSM.")
         return 0
 
-    node_osm = {node["id"]: int(node["osm_node"]) for node in nodes}
-    for edge in edges:
+    node_osm = {
+        node["id"]: int(node["osm_node"]) for node in nodes if "osm_node" in node
+    }
+    # Edge koneksi kantor damkar (connection: model) bukan ruas jalan bernama,
+    # jadi tidak ikut pencocokan nama maupun audit arah.
+    road_edges = [edge for edge in edges if edge.get("connection") != "model"]
+    skipped = len(edges) - len(road_edges)
+    if skipped:
+        print(f"Melewati {skipped} edge koneksi kantor damkar (bukan ruas jalan OSM).")
+    audited = [
+        edge for edge in road_edges
+        if edge["from"] in node_osm and edge["to"] in node_osm
+    ]
+    for edge in audited:
         edge["_source_osm"] = node_osm[edge["from"]]
         edge["_target_osm"] = node_osm[edge["to"]]
     lats = [node["lat"] for node in nodes]
@@ -266,8 +301,8 @@ def main() -> int:
         ways = overpass(
             f'[out:json][timeout:120];way["highway"]["name"]({bbox});out body;'
         ).get("elements", [])
-        check_roads(edges, ways)
-        audit_edge_directions(edges, ways)
+        check_roads(audited, ways)
+        audit_edge_directions(audited, ways)
     except urllib.error.HTTPError as exc:
         print("Overpass HTTP", exc.code, "saat cek ruas:", exc.read()[:300])
     return 0
