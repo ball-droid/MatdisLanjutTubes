@@ -631,6 +631,13 @@ python tools/buat_peta.py                      # ambil juga data fasilitas OSM
 python tools/buat_peta.py --tanpa-osm          # hanya isi YAML, tanpa internet
 ```
 
+Catatan tile: basemap jalan memakai **Esri World Street Map** dan alternatifnya
+citra satelit Esri, karena tile resmi `tile.openstreetmap.org` menolak
+permintaan dari halaman lokal/aplikasi (usage policy OSM) dan basemap CARTO
+kini mewajibkan API key — keduanya membuat peta muncul "access blocked" atau
+watermark saat file HTML dibuka langsung. **Data** peta (node, ruas, hydrant,
+kantor polisi/damkar) tetap OpenStreetMap dan atribusinya tetap dicantumkan.
+
 Isi peta (semua dihitung ulang dari YAML, jadi tidak pernah beda dengan
 keluaran simulasi):
 
