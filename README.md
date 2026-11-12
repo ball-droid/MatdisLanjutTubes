@@ -1,6 +1,7 @@
-# Rute Mobil Damkar ke Kebakaran Pasar Johar Relokasi — Model Graf & Dijkstra
+# Rute Mobil Damkar ke Kebakaran Pasar Johar Relokasi — Model Graf, Dijkstra & A\*
 
-Kode Python untuk tanggung jawab C: mesin pencari rute baseline, pembacaan
+Kode Python untuk tanggung jawab C: mesin pencari rute baseline Dijkstra,
+algoritma pembanding **A\***, pembacaan
 skenario YAML, `run_simulation()`, pengujian Pytest, dan benchmark. Struktur
 modularnya mengambil inspirasi dari
 [trisgelar/matdis-tubes-2026](https://github.com/trisgelar/matdis-tubes-2026),
@@ -55,6 +56,10 @@ damkar, dan berapa selisih beban rutenya? Persis itu yang dihitung program ini.
 - **Shortest path** — jalur dengan `W(p)` minimum dari `start` ke `goal`.
 - **Dijkstra** — dipakai karena seluruh bobot non-negatif; program menolak bobot
   negatif maupun `NaN`/`inf` sejak data dimuat.
+- **A\*** (pembanding) — kunci prioritas `f(n) = g(n) + h(n)` dengan heuristik
+  haversine `h(n) = jarak lurus / kecepatan model terbesar (35 km/jam)`,
+  yang admissible sehingga biaya rute dijamin sama dengan Dijkstra. Rincian
+  dan hasil perbandingannya ada di bagian 19.
 - **Penutupan edge** — ruas dikeluarkan dari `E` untuk pencarian tertentu
   (`blocked_edges`), **bukan** bobotnya diganti angka besar. Ini mewakili
   akses yang tidak dapat dilalui.
@@ -254,9 +259,11 @@ source .venv/bin/activate
 python -m pip install -r requirements-dev.txt
 python -m pip install -e .
 python -m pathfinding.simulation                                  # skenario default: 31 node jalan asli
+python -m pathfinding.simulation --algorithm astar                # rute sama, diprose A* (bandingkan node dieksplorasi)
 python -m pathfinding.simulation --scenario data/pasar_johar_demo.yaml   # skenario demo lama (10 node)
 python -m pytest -v
 python -m pathfinding.benchmark --repeats 1000
+python -m pathfinding.benchmark --compare --repeats 10000        # tabel perbandingan Dijkstra vs A*
 ```
 
 ### Windows
@@ -267,9 +274,11 @@ py -m venv .venv
 python -m pip install -r requirements-dev.txt
 python -m pip install -e .
 python -m pathfinding.simulation
+python -m pathfinding.simulation --algorithm astar
 python -m pathfinding.simulation --scenario data/pasar_johar_demo.yaml
 python -m pytest -v
 python -m pathfinding.benchmark --repeats 1000
+python -m pathfinding.benchmark --compare --repeats 10000
 ```
 
 Jika PowerShell memblokir aktivasi, jalankan perintah memakai
@@ -288,13 +297,16 @@ python tools/eksperimen_arah.py                              # uji penerapan atu
 python -m pytest -v
 ```
 
-Cakupan 38 pengujian: perhitungan Dijkstra pada graf kecil, penutupan ruas,
+Cakupan 52 pengujian: perhitungan Dijkstra pada graf kecil, penutupan ruas,
 skenario tanpa rute, pembacaan YAML (termasuk skema referensi `execution_plan`),
 validasi struktur (ID duplikat, bobot negatif/non-angka, node/ruas tak
 dikenal, field peta separuh, tipe `directed`/`access_status`), konsistensi
 jumlah bobot rute terhadap total, keluaran simulasi (daftar node, daftar ruas,
-sumber berita, batas fakta), skenario tanpa rute alternatif, serta benchmark.
-Seluruh pengujian yang sudah ada sebelum pengembangan tetap lulus.
+sumber berita, batas fakta), skenario tanpa rute alternatif, benchmark, serta
+pengujian A* (`tests/test_astar.py`): kesetaraan biaya/urutan rute dengan
+Dijkstra pada kedua skenario, admissibility heuristik untuk seluruh 31 node,
+kontrak input yang sama, dan tabel perbandingan benchmark. Seluruh pengujian
+yang sudah ada sebelum pengembangan tetap lulus.
 
 ## 14. Contoh output program
 
@@ -342,6 +354,7 @@ Output `python -m pathfinding.simulation` (≈397 baris) berurutan: header kasus
   ...
   Total bobot : 10.74 menit estimasi
   Jumlah ruas : 14
+  Node dieksplorasi : 30 (pembanding Dijkstra vs A*)
 
   JALUR DAMKAR (urutan jalan yang dilalui)
     Jl. Madukoro V  ->  Jl. Madukoro III  ->  Jl. Cokrokembang  ->  ...
@@ -403,10 +416,13 @@ MatdisLanjutTubes/
 ├── src/pathfinding/
 │   ├── graph.py                   # adjacency list berbobot + validasi ID/bobot/arah
 │   ├── dijkstra.py                # Dijkstra baseline, rute ber-jejak ruas, reroute setelah penutupan
+│   ├── astar.py                   # A* pembanding: f = g + h, kontrak identik dengan Dijkstra
+│   ├── heuristic.py               # heuristik haversine admissible (jarak lurus / kecepatan terbesar)
 │   ├── io.py                      # YAML loader + validasi struktur & referensi skenario
-│   ├── simulation.py              # run_simulation dan CLI
-│   └── benchmark.py               # pengukuran waktu eksekusi
-├── tests/test_dijkstra.py         # 38 pengujian
+│   ├── simulation.py              # run_simulation dan CLI (--algorithm dijkstra|astar)
+│   └── benchmark.py               # pengukuran waktu + perbandingan Dijkstra vs A*
+├── tests/test_dijkstra.py         # 38 pengujian baseline
+├── tests/test_astar.py            # 14 pengujian A* & heuristik (total 52)
 ├── tools/
 │   ├── validasi_peta.py           # validasi node/nama ruas/aturan arah terhadap OSM
 │   └── eksperimen_arah.py         # uji penerapan aturan satu arah pada graf
@@ -428,4 +444,47 @@ MatdisLanjutTubes/
 - Anggota B dapat mengganti node, ruas, arah, dan bobot tanpa mengubah fungsi
   Dijkstra; perbarui pengujian yang memang mengekspektasikan angka tersebut.
 - Anggota D dapat memakai model graf yang sama untuk implementasi D\* Lite dan
-  mengukur perbandingannya dengan baseline.
+  mengukur perbandingannya dengan baseline C. Pembanding A\* (bagian 19) sudah
+  tersedia sebagai pembanding kedua; D\* Lite belum ada di repositori ini.
+
+## 19. Perbandingan A\* dengan Dijkstra (hasil pengukuran)
+
+A\* ditambahkan sebagai pembanding baseline dengan kontrak hasil yang sama:
+biaya rute, urutan node, dan urutan ruas **identik** pada kedua skenario (diuji
+`tests/test_astar.py`), jadi perbandingannya adil — yang berbeda hanya waktu
+eksekusi dan jumlah node dieksplorasi.
+
+Cara menjalankan:
+
+```bash
+python -m pathfinding.simulation --algorithm astar     # lihat "Node dieksplorasi" tiap rute
+python -m pathfinding.benchmark --compare --repeats 10000
+```
+
+Hasil `--compare --repeats 50000` pada skenario default (31 node / 33 ruas,
+Linux, Python 3.14, diulang tiga kali agar arah hasil stabil):
+
+| algoritma | rata-rata | minimum | biaya rute | node rute | node dieksplorasi |
+|---|---|---|---|---|---|
+| Dijkstra | 0.014–0,015 ms | 0,012 ms | 10,74 menit | 15 | 30 |
+| A\* | 0,028–0,031 ms | 0,025 ms | 10,74 menit | 15 | 27 |
+
+Rasio kecepatan Dijkstra/A\* ≈ **0,46–0,50×** — pada mesin ini A\* **lebih
+lambat** sekitar dua kali lipat walaupun memuat lebih sedikit node (hemat
+eksplorasi 3/30 = 10%). Setelah ruas `e14` ditutup, keduanya mengeksplorasi
+29 node sehingga selisihnya nol.
+
+Interpretasi (jujur, sesuai data):
+
+- **Yang dimenangkan A\*: efisiensi penelusuran.** Heuristik haversine
+  admissible memangkas 10% eksplorasi pada rute awal — pada graf besar
+  (ribuan node) penghematan semacam ini biasanya yang membuat A\* menang.
+- **Yang dimenangkan Dijkstra: waktu pada graf kecil.** Biaya heuristik
+  (haversine + cache dictionary + kunci antrian 3 elemen) lebih besar daripada
+  penghematan 3 pop pada graf 31 node. Karena itu pada proyek ini Dijkstra
+  tetap baseline yang wajar.
+- Angka waktu sangat bergantung mesin/versi Python dan hanya berlaku untuk
+  skenario ini; angka rute (10,74 / 11,93 menit) tidak bergantung algoritma.
+- Heuristik sengaja lemah (pembagi kecepatan terbesar 35 km/jam) demi
+  admissibility; heuristik lebih kuat tetap harus memenuhi syarat yang sama
+  sebelum dipakai untuk mengklaim keunggulan apa pun.
