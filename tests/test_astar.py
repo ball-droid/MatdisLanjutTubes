@@ -164,7 +164,7 @@ def test_astar_closure_that_disconnects_goal_returns_none():
 
 def test_loader_extracts_coordinates_for_damkar_only():
     _, damkar = load_scenario(DEFAULT_SCENARIO)
-    assert len(damkar["coordinates"]) == 31
+    assert len(damkar["coordinates"]) == 34  # 31 simpang + 3 kantor damkar tambahan
     lat, lon = damkar["coordinates"]["pos_damkar_madukoro"]
     assert lat == pytest.approx(-6.9786176)
     assert lon == pytest.approx(110.4001383)

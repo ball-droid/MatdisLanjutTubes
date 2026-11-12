@@ -139,17 +139,19 @@ def _street_sequence(graph, nodes):
     return streets
 
 
-def test_damkar_scenario_uses_default_and_has_around_thirty_nodes():
+def test_damkar_scenario_uses_default_and_has_thirty_four_nodes():
     graph, scenario = load_scenario(DEFAULT_SCENARIO)
     assert DEFAULT_SCENARIO.name == "pasar_johar_damkar.yaml"
-    assert len(graph.nodes) == 31
+    # 31 simpang jalan asli + 3 kantor pemadam tambahan (node logistik).
+    assert len(graph.nodes) == 34
     edge_ids = {edge.edge_id for node_id in graph.nodes for edge in graph.neighbors(node_id)}
-    assert len(edge_ids) == 33
+    # 33 ruas jalan + 3 koneksi kantor damkar ke jaringan.
+    assert len(edge_ids) == 36
     assert scenario["start"] == "pos_damkar_madukoro"
     assert scenario["goal"] == "pasar_johar_relokasi"
 
 
-def test_damkar_every_edge_has_real_street_name_and_positive_weight():
+def test_damkar_every_edge_has_street_name_and_positive_weight():
     graph, _ = load_scenario(DEFAULT_SCENARIO)
     seen = set()
     for node_id in graph.nodes:
@@ -157,9 +159,13 @@ def test_damkar_every_edge_has_real_street_name_and_positive_weight():
             if edge.edge_id in seen:
                 continue
             seen.add(edge.edge_id)
-            assert edge.road_name.startswith("Jl. "), edge.edge_id
             assert edge.weight > 0
-    assert len(seen) == 33
+            if edge.edge_id.startswith("e_log"):
+                # Edge koneksi kantor damkar: nama jalan belum terverifikasi di OSM.
+                assert edge.road_name, edge.edge_id
+            else:
+                assert edge.road_name.startswith("Jl. "), edge.edge_id
+    assert len(seen) == 36
 
 
 def test_damkar_initial_route_follows_northern_corridor():
@@ -395,8 +401,8 @@ def test_simulation_lists_every_node_and_edge(capsys):
     assert run_simulation(DEFAULT_SCENARIO) == 0
     output = capsys.readouterr().out
     graph, _ = load_scenario(DEFAULT_SCENARIO)
-    assert "DAFTAR NODE (31 node)" in output
-    assert "DAFTAR RUAS JALAN (33 ruas)" in output
+    assert "DAFTAR NODE (34 node)" in output
+    assert "DAFTAR RUAS JALAN (36 ruas)" in output
     for node_id in graph.nodes:
         assert node_id in output, node_id
     for edge_id in graph.edge_ids:
