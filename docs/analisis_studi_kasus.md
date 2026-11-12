@@ -67,7 +67,8 @@ perjalanan damkar. Node **bukan** atribut fasilitas (kapasitas air, pompa,
 selang, durasi pemadaman, spesifikasi kendaraan) dan bukan daftar fasilitas
 pemadam.
 
-Skenario default `data/pasar_johar_damkar.yaml` (31 node) memakai pola peran:
+Skenario default `data/pasar_johar_damkar.yaml` (31 simpang; kini 34 node
+dengan 3 kantor damkar tambahan, lihat bagian 8) memakai pola peran:
 
 | Peran | Contoh node |
 |---|---|
@@ -180,3 +181,29 @@ Pengembangan dilakukan bertahap, tiap tahap di-commit terpisah sesuai prompt:
 4. `feat:` algoritma dan skenario rute (rincian edge per rute, skenario tanpa alternatif).
 5. `feat:` penyempurnaan tampilan simulasi (daftar node/edge, sumber berita).
 6. `test:` + `docs:` pengujian dan dokumentasi akhir.
+
+## 8. Pengembangan fasilitas node (tambahan, 2026-11-12)
+
+Bagian 4.1 menyebut node bukan wadah fasilitas. Pengembangan terbaru
+membuka pengecualian yang **sama-sama terdokumentasi**: node kini boleh
+memuat *fasilitas lokasi* — hydrant (sumber air isi ulang), identitas kantor
+polisi, dan kantor damkar (armada/personel untuk logistik) — tanpa mengubah
+sifat node sebagai titik jaringan. Rincian lengkap ada di README bagian 20;
+ringkasannya:
+
+- Pemeriksaan peta dengan `tools/validasi_fasilitas.py` (Overpass/Nominatim/
+  OSRM, ekstraksi 2026-11-12) di area sekitar Pasar Johar menemukan 15 hydrant,
+  15 kantor polisi, dan 3 kantor damkar tambahan dalam radius 5 km.
+- Aturan model: hydrant di setiap node kecuali node kantor polisi. Satu node
+  memenuhi syarat kantor polisi: `simpang_cipto_bugangan` (32 m dari Polsek
+  Semarang Timur, Jl. Dr. Cipto no 66) sehingga menjadi satu-satunya node
+  tanpa hydrant.
+- Satu hydrant benar-benar ada di dekat node: Hydrant BCA (251 m dari
+  `simpang_depok_wahidhasyim`). Sisanya hydrant asumsi model dengan jejak
+  jarak ke hydrant OSM terdekat, supaya mudah ditinjau, bukan dikoreksi
+  diam-diam — sama seperti keputusan bobot pada bagian 4.3.
+- Tiga kantor pemadam tambahan (OSM way 1338307869, 740895779, 564500892)
+  menjadi node logistik bercabang mati; jumlah mobil/personel adalah asumsi
+  model karena tidak tersedia di berita maupun OSM.
+- Jumlah node/edge skenario menjadi 34/36; rute awal dan alternatif tidak
+  berubah (10,74 dan 11,93 menit).
