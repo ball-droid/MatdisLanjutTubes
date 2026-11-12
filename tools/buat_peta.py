@@ -320,8 +320,9 @@ TEMPLATE = """<!DOCTYPE html>
     <div class="note warn">Hydrant di simpang selain yang bertanda "terverifikasi OSM" adalah
     <b>asumsi model</b>; kantor polisi, kantor damkar, dan hydrant berwarna biru tua/merah berasal
     langsung dari OpenStreetMap (ekstraksi __GENERATED__).</div>
-    <div class="src">Sumber peta: OpenStreetMap contributors (ODbL) · tile: openstreetmap.org /
-    Esri · rute: Dijkstra (pembanding A* sama hasilnya).<br>__SOURCES__</div>
+    <div class="src">Sumber data: OpenStreetMap contributors (ODbL) · tile dasar:
+    Esri World Street Map (jalan) dan Esri World Imagery (citra satelit) ·
+    rute: Dijkstra (pembanding A* sama hasilnya).<br>__SOURCES__</div>
   </aside>
   <div id="map"></div>
 </div>
@@ -340,12 +341,18 @@ const esc = s => String(s ?? "").replace(/[&<>"']/g,
   c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 
 const map = L.map("map", {zoomControl: true});
-const osmTiles = L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png",
-  {maxZoom: 19, attribution: "&copy; OpenStreetMap contributors"});
+// Tile resmi tile.openstreetmap.org menolak permintaan dari halaman lokal
+// (usage policy OSM) dan basemap CARTO kini butuh API key, jadi basemap jalan
+// memakai Esri World Street Map yang gratis tanpa kunci dan mengizinkan
+// pemakaian client-side. Data peta tetap OpenStreetMap (atribusi dicantumkan).
+const streetTiles = L.tileLayer(
+  "https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}",
+  {maxZoom: 19,
+   attribution: "Tiles &copy; Esri · data &copy; OpenStreetMap contributors"});
 const satellite = L.tileLayer(
   "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
   {maxZoom: 18, attribution: "Tiles &copy; Esri"});
-osmTiles.addTo(map);
+streetTiles.addTo(map);
 
 // --- lapisan jaringan -------------------------------------------------------
 const gNetwork = L.layerGroup();
@@ -469,7 +476,7 @@ const overlays = {
   "Node & waktu tempuh": gNodes,
   "Fasilitas OSM": gOsm
 };
-L.control.layers({"Peta jalan": osmTiles, "Citra satelit": satellite}, overlays,
+L.control.layers({"Peta jalan": streetTiles, "Citra satelit": satellite}, overlays,
   {collapsed: false}).addTo(map);
 [gNetwork, gInitial, gAlternate, gClosed, gNodes].forEach(l => l.addTo(map));
 if (OSM.hydrants.length || OSM.police.length || OSM.stations.length) gOsm.addTo(map);
