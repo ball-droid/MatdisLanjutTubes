@@ -458,7 +458,8 @@ MatdisLanjutTubes/
 │   ├── pasar_johar_damkar.yaml    # SKENARIO DEFAULT: 34 node (31 simpang OSM + 3 kantor damkar)
 │   └── pasar_johar_demo.yaml      # skenario lama berbasis screenshot (10 node)
 ├── docs/
-│   └── analisis_studi_kasus.md    # analisis berita, batas fakta, rancangan node/edge, keputusan arah
+│   ├── analisis_studi_kasus.md    # analisis berita, batas fakta, rancangan node/edge, keputusan arah
+│   └── peta_rute_damkar.html      # peta interaktif (hasil tools/buat_peta.py)
 ├── src/pathfinding/
 │   ├── graph.py                   # adjacency list berbobot + validasi ID/bobot/arah
 │   ├── dijkstra.py                # Dijkstra baseline, rute ber-jejak ruas, reroute setelah penutupan
@@ -473,6 +474,7 @@ MatdisLanjutTubes/
 ├── tools/
 │   ├── validasi_peta.py           # validasi node/nama ruas/aturan arah terhadap OSM
 │   ├── validasi_fasilitas.py      # cocokkan hydrant, kantor polisi, kantor damkar ke OSM
+│   ├── buat_peta.py               # generate peta HTML interaktif (Leaflet + tile OSM)
 │   └── eksperimen_arah.py         # uji penerapan aturan satu arah pada graf
 ├── pyproject.toml
 ├── requirements.txt
@@ -617,3 +619,34 @@ Contoh penulisan pada `data/pasar_johar_damkar.yaml`:
 Periksa ulang kapan saja dengan
 `python tools/validasi_fasilitas.py data/pasar_johar_damkar.yaml --emit`
 (butuh internet) — laporannya identik dengan yang mendasari bagian ini.
+
+## 21. Peta visual: jaringan, rute, dan fasilitas (Leaflet + OSM)
+
+`tools/buat_peta.py` mengubah skenario YAML menjadi peta HTML interaktif
+`docs/peta_rute_damkar.html` — cukup dobel-klik file itu di peramban
+(internet diperlukan untuk tile peta dan pustaka Leaflet dari CDN):
+
+```bash
+python tools/buat_peta.py                      # ambil juga data fasilitas OSM
+python tools/buat_peta.py --tanpa-osm          # hanya isi YAML, tanpa internet
+```
+
+Isi peta (semua dihitung ulang dari YAML, jadi tidak pernah beda dengan
+keluaran simulasi):
+
+| Lapisan | Isi |
+|---|---|
+| Jaringan (bisa dilalui damkar) | 36 ruas + 34 node graf model, klik untuk bobot/nama jalan |
+| Rute awal | pola biru tebal, 10,74 menit / 14 ruas |
+| Ruas tertutup | merah putus-putus pada `e14` (Jl. Barito) — hambatan kerumunan |
+| Rute alternatif | oranye putus-putus, 11,93 menit / 17 ruas (koridor selatan) |
+| Node & waktu tempuh | warna node = lama dari pos damkar (≤3 hijau, 3–6 kuning, 6–9 oranye, >9 merah) — jawaban "ke mana saja damkar bisa pergi dan berapa lama" |
+| Fasilitas OSM | 22 hydrant, 18 kantor polisi, 4 kantor damkar asli dari OpenStreetMap |
+
+Klik sebuah node untuk melihat perannya (rute awal/alternatif/tujuan), waktu
+tempuh dari pos, status hydrant (terverifikasi OSM atau asumsi model), dan
+armada/personel kantor damkar. Basis peta bisa diganti ke **citra satelit**
+(Esri) lewat kontrol lapisan di kanan atas.
+
+Peta digenerate ulang setiap kali data berubah; file HTML ikut di-commit agar
+bisa langsung dibuka tanpa menjalankan ulang tool.
