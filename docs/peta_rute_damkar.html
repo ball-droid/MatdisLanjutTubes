@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rute Damkar ke Kebakaran Relokasi Pasar Johar (jaringan jalan asli)</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; }
+  #app { display: flex; height: 100%; }
+  #panel { width: 330px; min-width: 330px; background: #0f172a; color: #e2e8f0;
+           padding: 18px 18px 24px; overflow-y: auto; }
+  #panel h1 { font-size: 17px; margin: 0 0 4px; color: #f8fafc; line-height: 1.3; }
+  #panel .sub { font-size: 12px; color: #94a3b8; margin-bottom: 14px; line-height: 1.5; }
+  .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 16px; }
+  .stat { background: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 8px 10px; }
+  .stat b { display: block; font-size: 16px; color: #f8fafc; }
+  .stat span { font-size: 11px; color: #94a3b8; }
+  h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .06em;
+       color: #64748b; margin: 18px 0 8px; }
+  .legend-item { display: flex; align-items: center; gap: 9px; font-size: 12.5px;
+                 margin: 7px 0; color: #cbd5e1; line-height: 1.35; }
+  .swatch { width: 26px; height: 12px; border-radius: 3px; flex: none; border: 1px solid rgba(255,255,255,.35); }
+  .dot { width: 13px; height: 13px; border-radius: 50%; flex: none; border: 2px solid #0f172a; }
+  .note { font-size: 11.5px; color: #94a3b8; background: #1e293b; border-left: 3px solid #3b82f6;
+          padding: 8px 10px; border-radius: 0 6px 6px 0; margin-top: 12px; line-height: 1.55; }
+  .note.warn { border-left-color: #f59e0b; }
+  .src { font-size: 11px; color: #64748b; margin-top: 14px; line-height: 1.6; word-break: break-all; }
+  #map { flex: 1; height: 100%; }
+  .popup { font-size: 12.5px; line-height: 1.5; max-width: 280px; }
+  .popup b { font-size: 13px; }
+  .popup .id { color: #64748b; font-family: ui-monospace, monospace; font-size: 11px; }
+  .badge { display: inline-block; background: #e2e8f0; color: #0f172a; border-radius: 10px;
+           font-size: 10.5px; padding: 1px 7px; margin: 2px 3px 0 0; font-weight: 600; }
+  .badge.blue { background: #60a5fa; }
+  .badge.orange { background: #fbbf24; }
+  .badge.green { background: #34d399; }
+  .badge.purple { background: #c084fc; }
+  .badge.red { background: #f87171; }
+  .muted { color: #64748b; font-size: 11.5px; }
+  @media (max-width: 760px) { #app { flex-direction: column; } #panel { width: 100%; min-width: 0; max-height: 45%; } }
+</style>
+</head>
+<body>
+<div id="app">
+  <aside id="panel">
+    <h1>Rute Damkar ke Kebakaran Relokasi Pasar Johar (jaringan jalan asli)</h1>
+    <div class="sub">Relokasi Pasar Johar, kawasan Masjid Agung Jawa Tengah (MAJT), Semarang<br>Skenario: pasar_johar_damkar.yaml · dibuat 2026-11-12</div>
+    <div class="stats">
+      <div class="stat"><b>34</b><span>node (bisa dilalui damkar)</span></div>
+      <div class="stat"><b>36</b><span>ruas jalan</span></div>
+      <div class="stat"><b>10.74</b><span>rute awal (menit)</span></div>
+      <div class="stat"><b>11.93</b><span>setelah e14 ditutup</span></div>
+    </div>
+
+    <h2>Lapisan peta</h2>
+    <div class="legend-item"><span class="swatch" style="background:#94a3b8"></span> Jaringan jalan yang bisa dilalui damkar</div>
+    <div class="legend-item"><span class="swatch" style="background:#1d4ed8"></span> Rute awal (tercepat)</div>
+    <div class="legend-item"><span class="swatch" style="background:#f59e0b"></span> Rute alternatif setelah kerumunan menutup <code>e14</code></div>
+    <div class="legend-item"><span class="swatch" style="background:#dc2626"></span> Ruas tertutup kerumunan (event berita)</div>
+
+    <h2>Warna node = waktu dari pos damkar</h2>
+    <div class="legend-item"><span class="dot" style="background:#22c55e"></span> ≤ 3 menit</div>
+    <div class="legend-item"><span class="dot" style="background:#eab308"></span> 3–6 menit</div>
+    <div class="legend-item"><span class="dot" style="background:#f97316"></span> 6–9 menit</div>
+    <div class="legend-item"><span class="dot" style="background:#ef4444"></span> &gt; 9 menit</div>
+    <div class="legend-item"><span class="dot" style="background:#22c55e;border-color:#fff"></span> Hijau tebal = titik awal</div>
+    <div class="legend-item"><span class="dot" style="background:#ef4444;border-color:#fff"></span> Merah = tujuan</div>
+
+    <h2>Fasilitas</h2>
+    <div class="legend-item"><span class="dot" style="background:#06b6d4"></span> Node ber-hydrant (bisa isi air)</div>
+    <div class="legend-item"><span class="dot" style="background:#6366f1"></span> Node kantor polisi (tanpa hydrant)</div>
+    <div class="legend-item"><span class="dot" style="background:#a855f7"></span> Kantor damkar (logistik: mobil/personel)</div>
+    <div class="legend-item"><span class="swatch" style="background:#0ea5e9;height:13px;width:13px;border-radius:50%"></span> Hydrant asli di OSM (klik untuk detail)</div>
+    <div class="legend-item"><span class="swatch" style="background:#1e3a8a;height:13px;width:13px;border-radius:50%"></span> Kantor polisi asli di OSM</div>
+    <div class="legend-item"><span class="swatch" style="background:#b91c1c;height:13px;width:13px;border-radius:50%"></span> Kantor damkar asli di OSM</div>
+
+    <div class="note">Semua node dan ruas pada peta ini <b>bisa dilalui mobil damkar</b> menurut model
+    (graf tidak berarah). Klik node untuk melihat waktu tempuh dari pos, status hydrant,
+    dan fasilitasnya; klik ruas untuk melihat bobot dan nama jalan.</div>
+    <div class="note warn">Hydrant di simpang selain yang bertanda "terverifikasi OSM" adalah
+    <b>asumsi model</b>; kantor polisi, kantor damkar, dan hydrant berwarna biru tua/merah berasal
+    langsung dari OpenStreetMap (ekstraksi 2026-11-12).</div>
+    <div class="src">Sumber peta: OpenStreetMap contributors (ODbL) · tile: openstreetmap.org /
+    Esri · rute: Dijkstra (pembanding A* sama hasilnya).<br>https://semarang.bisnis.com/read/20220202/535/1496092/relokasi-pasar-johar-terbakar-ganjar-minta-pedagang-diprioritaskan<br>https://jateng.antaranews.com/berita/431073/kerumunan-warga-sulitkan-pemadaman-kebakaran-pasar-johar-relokasi</div>
+  </aside>
+  <div id="map"></div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+const NODES = [{"id": "pos_damkar_madukoro", "label": "Dinas Pemadam Kebakaran Kota Semarang (Jl. Madukoro III)", "lat": -6.9786176, "lon": 110.4001383, "roles": ["titik awal", "rute awal", "rute alternatif"], "minutes": 0.0, "hydrant": {"verified": false, "distance_m": 0, "nearest_osm_m": 1872, "source": "asumsi model: hydrant di simpang; OSM terdekat node/5438903716 (1872 m)"}, "facility": null}, {"id": "simpang_madukoro_v", "label": "Simpang Jl. Madukoro V × Jl. Madukoro III", "lat": -6.9790148, "lon": 110.4001748, "roles": ["rute awal", "rute alternatif"], "minutes": 0.13, "hydrant": {"verified": false, "distance_m": 0, "nearest_osm_m": 1910, "source": "asumsi model: hydrant di simpang; OSM terdekat node/5438903716 (1910 m)"}, "facility": null}, {"id": "simpang_madukoro_cokrokembang", "label": "Simpang Jl. Madukoro III × Jl. Cokrokembang", "lat": -6.9790301, "lon": 110.399982, "roles": ["rute awal"], "minutes": 0.22, "hydrant": {"verified": false, "distance_m": 0, "nearest_osm_m": 1921, "source": "asumsi model: hydrant di simpang; OSM terdekat node/5438903716 (1921 m)"}, "facility": null}, {"id": "simpang_madukoro_east", "label": "Simpang Jl. Madukoro III × Jl. Madukoro", "lat": -6.9789031, "lon": 110.4010628, "roles": ["rute alternatif"], "minutes": 0.53, "hydrant": {"verified": false, "distance_m": 0, "nearest_osm_m": 1855, "source": "asumsi model: hydrant di simpang; OSM terdekat node/5438903716 (1855 m)"}, "facility": null}, {"id": "simpang_cokrokembang_sudirman", "label": "Simpang Jl. Cokrokembang × Jl. Jenderal Sudirman", "lat": -6.9806681, "lon": 110.400154, "roles": ["rute awal"], "minutes": 0.95, "hydrant": {"verified": false, "distance_m": 0, "nearest_osm_m": 2076, "source": "asumsi model: hydrant di simpang; OSM terdekat node/5438903716 (2076 m)"}, "facility": null}, {"id": "simpang_sudirman_soegiyopranoto", "label": "Simpang Jl. Jenderal Sudirman × Jl. MGR Soegiyopranoto", "lat": -6.9810779, "lon": 110.4014766, "roles": ["rute awal"], "minutes": 1.37, "hydrant": {"verified": false, "distance_m": 0, "nearest_osm_m": 1958, "source": "asumsi model: hydrant di simpang; OSM terdekat node/5466104936 (1958 m)"}, "facility": null}, {"id": "simpang_soegiyopranoto_sutomo", "label": "Simpang Jl. MGR Soegiyopranoto × Jl. Dokter Sutomo", "lat": -6.9844678, "lon": 110.4091972, "roles": ["rute awal"], "minutes": 2.97, "hydrant": {"verified": false, "distance_m": 0, "nearest_osm_m": 1390, "source": "asumsi model: hydrant di simpang; OSM terdekat node/5510605630 (1390 m)"}, "facility": null}, {"id": "simpang_sutomo_pandanaran", "label": "Simpang Jl. Dokter Sutomo × Jl. Pandanaran", "lat": -6.9847221, "lon": 110.4094535, "roles": ["rute awal"], "minutes": 3.04, "hydrant": {"verified": false, "distance_m": 0, "nearest_osm_m": 1354, "source": "asumsi model: hydrant di simpang; OSM terdekat node/5510605630 (1354 m)"}, "facility": null}, {"id": "simpang_pandanaran_kyaisaleh", "label": "Simpang Jl. Pandanaran × Jl. Kyai Saleh", "lat": -6.9865497, "lon": 110.4138406, "roles": ["rute awal"], "minutes": 3.95, "hydrant": {"verified": false, "distance_m": 0, "nearest_osm_m": 831, "source": "asumsi model: hydrant di simpang; OSM terdekat node/5510605630 (831 m)"}, "facility": null}, {"id": "simpang_kyaisaleh_pekunden", "label": "Simpang Jl. Kyai Saleh × Jl. Pekunden", "lat": -6.986453, "lon": 110.4138619, "roles": ["rute awal"], "minutes": 3.97, "hydrant": {"verified": false, "distance_m": 0, "nearest_osm_m": 832, "source": "asumsi model: hydrant di simpang; OSM terdekat node/5510605630 (832 m)"}, "facility": null}, {"id": "simpang_pekunden_batan", "label": "Simpang Jl. Pekunden × Jl. Batan Selatan", "lat": -6.9847995, "lon": 110.4142003, "roles": ["rute awal"], "minutes": 4.29, "hydrant": {"verified": false, "distance_m": 0, "nearest_osm_m": 872, "source": "asumsi model: hydrant di simpang; OSM terdekat node/5510605630 (872 m)"}, "facility": null}, {"id": "simpang_batan_panjaitan", "label": "Simpang Jl. Batan Selatan × Jl. Mayjend D.I. Panjaitan", "lat": -6.9855466, "lon": 110.4176185, "roles": ["rute awal"], "minutes": 4.95, "hydrant": {"verified": false, "distance_m": 0, "nearest_osm_m": 517, "source": "asumsi model: hydrant di simpang; OSM terdekat node/5510605630 (517 m)"}, "facility": null}, {"id": "simpang_panjaitan_haryono", "label": "Simpang Jl. Mayjend D.I. Panjaitan × Jl. Kartini × Jl. M.T. Haryono", "lat": -6.9853872, "lon": 110.4315944, "roles": ["rute awal"], "minutes": 7.6, "hydrant": {"verified": false, "distance_m": 0, "nearest_osm_m": 661, "source": "asumsi model: hydrant di simpang; OSM terdekat node/5510567217 (661 m)"}, "facility": null}, {"id": "simpang_kartini_barito", "label": "Simpang Jl. Kartini × Jl. Barito", "lat": -6.9856806, "lon": 110.4398125, "roles": ["rute awal"], "minutes": 9.16, "hydrant": {"verified": false, "distance_m": 0, "nearest_osm_m": 1539, "source": "asumsi model: hydrant di simpang; OSM terdekat node/5510567217 (1539 m)"}, "facility": null}, {"id": "simpang_barito_tirtoyoso", "label": "Simpang Jl. Barito × Jl. Tirtoyoso XI", "lat": -6.9810549, "lon": 110.4407921, "roles": ["rute awal"], "minutes": 10.22, "hydrant": {"verified": false, "distance_m": 0, "nearest_osm_m": 1585, "source": "asumsi model: hydrant di simpang; OSM terdekat node/5424074267 (1585 m)"}, "facility": null}, {"id": "simpang_tirtoyoso_xi", "label": "Simpang Jl. Tirtoyoso XI × Jl. Tirtoyoso Batas", "lat": -6.9810185, "lon": 110.4399262, "roles": [], "minutes": 10.51, "hydrant": {"verified": false, "distance_m": 0, "nearest_osm_m": 1492, "source": "asumsi model: hydrant di simpang; OSM terdekat node/5424074267 (1492 m)"}, "facility": null}, {"id": "simpang_tirtoyoso_batas", "label": "Simpang Jl. Tirtoyoso Batas × Jl. Tirtoyoso V", "lat": -6.9786949, "lon": 110.4392905, "roles": ["rute alternatif"], "minutes": 11.31, "hydrant": {"verified": false, "distance_m": 0, "nearest_osm_m": 1372, "source": "asumsi model: hydrant di simpang; OSM terdekat node/5424074267 (1372 m)"}, "facility": null}, {"id": "simpang_madukoro_sudirman", "label": "Simpang Jl. Madukoro × Jl. Jenderal Sudirman", "lat": -6.9808666, "lon": 110.4014155, "roles": ["rute alternatif"], "minutes": 1.01, "hydrant": {"verified": false, "distance_m": 0, "nearest_osm_m": 1957, "source": "asumsi model: hydrant di simpang; OSM terdekat node/5466104936 (1957 m)"}, "facility": null}, {"id": "simpang_sudirman_soegiyopranoto2", "label": "Simpang Jl. Jenderal Sudirman × Jl. MGR Soegiyopranoto (sisi timur)", "lat": -6.9808873, "lon": 110.4015208, "roles": ["rute alternatif"], "minutes": 1.03, "hydrant": {"verified": false, "distance_m": 0, "nearest_osm_m": 1947, "source": "asumsi model: hydrant di simpang; OSM terdekat node/5466104936 (1947 m)"}, "facility": null}, {"id": "simpang_soegiyopranoto_indraprasta", "label": "Simpang Jl. MGR Soegiyopranoto × Jl. Indraprasta", "lat": -6.9809322, "lon": 110.4026634, "roles": ["rute alternatif"], "minutes": 1.26, "hydrant": {"verified": false, "distance_m": 0, "nearest_osm_m": 1828, "source": "asumsi model: hydrant di simpang; OSM terdekat node/5466104936 (1828 m)"}, "facility": null}, {"id": "simpang_indraprasta_tendean", "label": "Simpang Jl. Indraprasta × Jl. Kapten Piere Tendean", "lat": -6.9785581, "lon": 110.4116493, "roles": ["rute alternatif"], "minutes": 3.09, "hydrant": {"verified": false, "distance_m": 0, "nearest_osm_m": 806, "source": "asumsi model: hydrant di simpang; OSM terdekat node/5466104936 (806 m)"}, "facility": null}, {"id": "simpang_tendean_pemuda", "label": "Simpang Jl. Kapten Piere Tendean × Jl. Pemuda", "lat": -6.9778946, "lon": 110.4157988, "roles": ["rute alternatif"], "minutes": 3.89, "hydrant": {"verified": false, "distance_m": 0, "nearest_osm_m": 370, "source": "asumsi model: hydrant di simpang; OSM terdekat node/5466104936 (370 m)"}, "facility": null}, {"id": "simpang_depok_wahidhasyim", "label": "Simpang Jl. Depok × Jl. KH. Wahid Hasyim", "lat": -6.9765057, "lon": 110.4205462, "roles": ["rute alternatif"], "minutes": 4.99, "hydrant": {"verified": true, "osm_node": 5466104936, "name": "Hydrant BCA", "operator": "PAM", "kind": "pillar", "distance_m": 251}, "facility": null}, {"id": "simpang_wahidhasyim_warung", "label": "Simpang Jl. KH. Wahid Hasyim × Jl. Gang Warung", "lat": -6.9749106, "lon": 110.4251023, "roles": ["rute alternatif"], "minutes": 6.06, "hydrant": {"verified": false, "distance_m": 0, "nearest_osm_m": 335, "source": "asumsi model: hydrant di simpang; OSM terdekat node/5424074267 (335 m)"}, "facility": null}, {"id": "simpang_pekojan_petudungan", "label": "Simpang Jl. Pekojan × Jl. Petudungan", "lat": -6.9742842, "lon": 110.4283151, "roles": ["rute alternatif"], "minutes": 6.91, "hydrant": {"verified": false, "distance_m": 0, "nearest_osm_m": 370, "source": "asumsi model: hydrant di simpang; OSM terdekat node/5424074267 (370 m)"}, "facility": null}, {"id": "simpang_petudungan_haryono", "label": "Simpang Jl. Petudungan × Jl. M.T. Haryono", "lat": -6.9744825, "lon": 110.4312024, "roles": ["rute alternatif"], "minutes": 7.87, "hydrant": {"verified": false, "distance_m": 0, "nearest_osm_m": 567, "source": "asumsi model: hydrant di simpang; OSM terdekat node/5424074267 (567 m)"}, "facility": null}, {"id": "simpang_haryono_dargo", "label": "Simpang Jl. M.T. Haryono × Jl. Dargo", "lat": -6.9762155, "lon": 110.4312476, "roles": ["rute alternatif"], "minutes": 8.2, "hydrant": {"verified": false, "distance_m": 0, "nearest_osm_m": 492, "source": "asumsi model: hydrant di simpang; OSM terdekat node/5424074267 (492 m)"}, "facility": null}, {"id": "simpang_cipto_bugangan", "label": "Simpang Jl. Dokter Cipto × Jl. Bugangan", "lat": -6.9760724, "lon": 110.4349887, "roles": ["rute alternatif"], "minutes": 9.19, "hydrant": null, "facility": {"type": "police_station", "verified": true, "name": "Polsek Semarang Timur", "address": "Jl. Dr. Cipto no 66", "osm_way": 564915121, "distance_m": 32}}, {"id": "simpang_bugangan_kanalsari", "label": "Simpang Jl. Bugangan × Jl. Kanalsari Barat I", "lat": -6.9751422, "lon": 110.4375241, "roles": ["rute alternatif"], "minutes": 9.79, "hydrant": {"verified": false, "distance_m": 0, "nearest_osm_m": 1194, "source": "asumsi model: hydrant di simpang; OSM terdekat node/5424074267 (1194 m)"}, "facility": null}, {"id": "simpang_kanalsari_tirtoyoso", "label": "Simpang Jl. Kanalsari Raya × Jl. Tirtoyoso Batas", "lat": -6.9768122, "lon": 110.4387697, "roles": ["rute alternatif"], "minutes": 10.66, "hydrant": {"verified": false, "distance_m": 0, "nearest_osm_m": 1308, "source": "asumsi model: hydrant di simpang; OSM terdekat node/5424074267 (1308 m)"}, "facility": null}, {"id": "pasar_johar_relokasi", "label": "Akses Relokasi Pasar Johar (Jl. Barito × Jl. Tirtoyoso V)", "lat": -6.9787493, "lon": 110.4411586, "roles": ["tujuan", "rute awal", "rute alternatif"], "minutes": 10.74, "hydrant": {"verified": false, "distance_m": 0, "nearest_osm_m": 1578, "source": "asumsi model: hydrant di simpang; OSM terdekat node/5424074267 (1578 m)"}, "facility": null}, {"id": "pos_damkar_tambahan_barat", "label": "Pos Pemadam Kebakaran (OSM tanpa nama, way 1338307869)", "lat": -6.9771843, "lon": 110.3775432, "roles": [], "minutes": 11.79, "hydrant": {"verified": false, "distance_m": 0, "source": "asumsi model: kantor pos memiliki sumber air sendiri"}, "facility": {"type": "fire_station", "verified": true, "trucks": 2, "personnel": 8, "logistics_note": "asumsi model: jumlah mobil/personel tidak tersedia di berita maupun OSM"}}, {"id": "pos_damkar_tambahan_utara", "label": "Pos Pemadam Kebakaran (OSM tanpa nama, way 740895779)", "lat": -6.968522, "lon": 110.3770136, "roles": [], "minutes": 18.25, "hydrant": {"verified": false, "distance_m": 0, "source": "asumsi model: kantor pos memiliki sumber air sendiri"}, "facility": {"type": "fire_station", "verified": true, "trucks": 2, "personnel": 8, "logistics_note": "asumsi model: jumlah mobil/personel tidak tersedia di berita maupun OSM"}}, {"id": "pos_damkar_tambahan_walisongo", "label": "Kantor Pemadam Kebakaran (Jl. Walisongo)", "lat": -6.9865333, "lon": 110.3584187, "roles": [], "minutes": 15.27, "hydrant": {"verified": false, "distance_m": 0, "source": "asumsi model: kantor damkar memiliki sumber air sendiri"}, "facility": {"type": "fire_station", "verified": true, "trucks": 3, "personnel": 10, "logistics_note": "asumsi model: jumlah mobil/personel tidak tersedia di berita maupun OSM"}}];
+const EDGES = [{"id": "e01", "from": "pos_damkar_madukoro", "to": "simpang_madukoro_v", "weight": 0.13, "road": "Jl. Madukoro V", "route": "initial", "closed": false}, {"id": "e_log02", "from": "pos_damkar_madukoro", "to": "pos_damkar_tambahan_utara", "weight": 18.25, "road": "koneksi model ke jaringan (nama jalan belum terverifikasi)", "route": null, "closed": false}, {"id": "e02", "from": "simpang_madukoro_v", "to": "simpang_madukoro_cokrokembang", "weight": 0.09, "road": "Jl. Madukoro III", "route": "initial", "closed": false}, {"id": "e03", "from": "simpang_madukoro_v", "to": "simpang_madukoro_east", "weight": 0.4, "road": "Jl. Madukoro III", "route": "alternate", "closed": false}, {"id": "e04", "from": "simpang_madukoro_cokrokembang", "to": "simpang_cokrokembang_sudirman", "weight": 0.73, "road": "Jl. Cokrokembang", "route": "initial", "closed": false}, {"id": "e_log01", "from": "simpang_madukoro_cokrokembang", "to": "pos_damkar_tambahan_barat", "weight": 11.57, "road": "koneksi model ke jaringan (nama jalan belum terverifikasi)", "route": null, "closed": false}, {"id": "e20", "from": "simpang_madukoro_east", "to": "simpang_madukoro_sudirman", "weight": 0.48, "road": "Jl. Madukoro - Jl. Madukoro I", "route": "alternate", "closed": false}, {"id": "e05", "from": "simpang_cokrokembang_sudirman", "to": "simpang_sudirman_soegiyopranoto", "weight": 0.42, "road": "Jl. Jendral Sudirman", "route": "initial", "closed": false}, {"id": "e_log03", "from": "simpang_cokrokembang_sudirman", "to": "pos_damkar_tambahan_walisongo", "weight": 14.32, "road": "Jl. Walisongo (koneksi model)", "route": null, "closed": false}, {"id": "e06", "from": "simpang_sudirman_soegiyopranoto", "to": "simpang_soegiyopranoto_sutomo", "weight": 1.6, "road": "Jl. MGR Soegiyopranoto - Jl. MGR. Sugiopranoto", "route": "initial", "closed": false}, {"id": "e07", "from": "simpang_soegiyopranoto_sutomo", "to": "simpang_sutomo_pandanaran", "weight": 0.07, "road": "Jl. Dokter Sutomo", "route": "initial", "closed": false}, {"id": "e08", "from": "simpang_sutomo_pandanaran", "to": "simpang_pandanaran_kyaisaleh", "weight": 0.91, "road": "Jl. Pandanaran", "route": "initial", "closed": false}, {"id": "e09", "from": "simpang_pandanaran_kyaisaleh", "to": "simpang_kyaisaleh_pekunden", "weight": 0.02, "road": "Jl. Kyai Saleh", "route": "initial", "closed": false}, {"id": "e10", "from": "simpang_kyaisaleh_pekunden", "to": "simpang_pekunden_batan", "weight": 0.32, "road": "Jl. Pekunden", "route": "initial", "closed": false}, {"id": "e11", "from": "simpang_pekunden_batan", "to": "simpang_batan_panjaitan", "weight": 0.66, "road": "Jl. Batan Selatan", "route": "initial", "closed": false}, {"id": "e12", "from": "simpang_batan_panjaitan", "to": "simpang_panjaitan_haryono", "weight": 2.65, "road": "Jl. Mayjend. D.I. Panjaitan", "route": "initial", "closed": false}, {"id": "e13", "from": "simpang_panjaitan_haryono", "to": "simpang_kartini_barito", "weight": 1.56, "road": "Jl. Kartini", "route": "initial", "closed": false}, {"id": "e19", "from": "simpang_panjaitan_haryono", "to": "simpang_haryono_dargo", "weight": 1.75, "road": "Jl. M.T. Haryono", "route": null, "closed": false}, {"id": "e14", "from": "simpang_kartini_barito", "to": "simpang_barito_tirtoyoso", "weight": 1.06, "road": "Jl. Barito", "route": "initial", "closed": true}, {"id": "e15", "from": "simpang_barito_tirtoyoso", "to": "simpang_tirtoyoso_xi", "weight": 0.29, "road": "Jl. Tirtoyoso XI", "route": null, "closed": false}, {"id": "e18", "from": "simpang_barito_tirtoyoso", "to": "pasar_johar_relokasi", "weight": 0.52, "road": "Jl. Barito", "route": "initial", "closed": false}, {"id": "e16", "from": "simpang_tirtoyoso_xi", "to": "simpang_tirtoyoso_batas", "weight": 0.8, "road": "Jl. Tirtoyoso Batas", "route": null, "closed": false}, {"id": "e17", "from": "simpang_tirtoyoso_batas", "to": "pasar_johar_relokasi", "weight": 0.62, "road": "Jl. Tirtoyoso V", "route": "alternate", "closed": false}, {"id": "e33", "from": "simpang_tirtoyoso_batas", "to": "simpang_kanalsari_tirtoyoso", "weight": 0.65, "road": "Jl. Tirtoyoso Batas", "route": "alternate", "closed": false}, {"id": "e21", "from": "simpang_madukoro_sudirman", "to": "simpang_sudirman_soegiyopranoto2", "weight": 0.02, "road": "Jl. Jendral Sudirman", "route": "alternate", "closed": false}, {"id": "e22", "from": "simpang_sudirman_soegiyopranoto2", "to": "simpang_soegiyopranoto_indraprasta", "weight": 0.23, "road": "Jl. MGR Soegiyopranoto", "route": "alternate", "closed": false}, {"id": "e23", "from": "simpang_soegiyopranoto_indraprasta", "to": "simpang_indraprasta_tendean", "weight": 1.83, "road": "Jl. Indraprasta", "route": "alternate", "closed": false}, {"id": "e24", "from": "simpang_indraprasta_tendean", "to": "simpang_tendean_pemuda", "weight": 0.8, "road": "Jl. Kapten Piere Tendean", "route": "alternate", "closed": false}, {"id": "e25", "from": "simpang_tendean_pemuda", "to": "simpang_depok_wahidhasyim", "weight": 1.1, "road": "Jl. Pemuda - Jl. MH. Thamrin - Jl. Depok", "route": "alternate", "closed": false}, {"id": "e26", "from": "simpang_depok_wahidhasyim", "to": "simpang_wahidhasyim_warung", "weight": 1.07, "road": "Jl. KH. Wahid Hasyim", "route": "alternate", "closed": false}, {"id": "e27", "from": "simpang_wahidhasyim_warung", "to": "simpang_pekojan_petudungan", "weight": 0.85, "road": "Jl. Gang Warung - Jl. Gang Pinggir - Jl. Pekojan", "route": "alternate", "closed": false}, {"id": "e28", "from": "simpang_pekojan_petudungan", "to": "simpang_petudungan_haryono", "weight": 0.96, "road": "Jl. Petudungan", "route": "alternate", "closed": false}, {"id": "e29", "from": "simpang_petudungan_haryono", "to": "simpang_haryono_dargo", "weight": 0.33, "road": "Jl. M.T. Haryono", "route": "alternate", "closed": false}, {"id": "e30", "from": "simpang_haryono_dargo", "to": "simpang_cipto_bugangan", "weight": 0.99, "road": "Jl. Dargo - Jl. Dokter Cipto", "route": "alternate", "closed": false}, {"id": "e31", "from": "simpang_cipto_bugangan", "to": "simpang_bugangan_kanalsari", "weight": 0.6, "road": "Jl. Bugangan", "route": "alternate", "closed": false}, {"id": "e32", "from": "simpang_bugangan_kanalsari", "to": "simpang_kanalsari_tirtoyoso", "weight": 0.87, "road": "Jl. Kanalsari Barat I - Jl. Kanalsari Raya", "route": "alternate", "closed": false}];
+const ROUTES = {"initial": {"cost": 10.74, "edges": 14, "nodes": ["pos_damkar_madukoro", "simpang_madukoro_v", "simpang_madukoro_cokrokembang", "simpang_cokrokembang_sudirman", "simpang_sudirman_soegiyopranoto", "simpang_soegiyopranoto_sutomo", "simpang_sutomo_pandanaran", "simpang_pandanaran_kyaisaleh", "simpang_kyaisaleh_pekunden", "simpang_pekunden_batan", "simpang_batan_panjaitan", "simpang_panjaitan_haryono", "simpang_kartini_barito", "simpang_barito_tirtoyoso", "pasar_johar_relokasi"]}, "alternate": {"cost": 11.93, "edges": 17, "nodes": ["pos_damkar_madukoro", "simpang_madukoro_v", "simpang_madukoro_east", "simpang_madukoro_sudirman", "simpang_sudirman_soegiyopranoto2", "simpang_soegiyopranoto_indraprasta", "simpang_indraprasta_tendean", "simpang_tendean_pemuda", "simpang_depok_wahidhasyim", "simpang_wahidhasyim_warung", "simpang_pekojan_petudungan", "simpang_petudungan_haryono", "simpang_haryono_dargo", "simpang_cipto_bugangan", "simpang_bugangan_kanalsari", "simpang_kanalsari_tirtoyoso", "simpang_tirtoyoso_batas", "pasar_johar_relokasi"]}};
+const OSM = {"hydrants": [{"lat": -6.9773177, "lon": 110.4269341, "name": "", "operator": "BPBD", "kind": "pillar", "address": "", "osm": "node/5424074267"}, {"lat": -6.9637661, "lon": 110.4081345, "name": "", "operator": "", "kind": "pillar", "address": "", "osm": "node/5438903716"}, {"lat": -6.9912389, "lon": 110.4247802, "name": "", "operator": "", "kind": "pillar", "address": "", "osm": "node/5439266340"}, {"lat": -6.99255, "lon": 110.4275469, "name": "", "operator": "", "kind": "pillar", "address": "", "osm": "node/5439266344"}, {"lat": -6.9714012, "lon": 110.4243786, "name": "BT Hydrant", "operator": "PAM", "kind": "pillar", "address": "", "osm": "node/5444554127"}, {"lat": -6.9757815, "lon": 110.4183912, "name": "Hydrant BCA", "operator": "PAM", "kind": "pillar", "address": "", "osm": "node/5466104936"}, {"lat": -6.9873759, "lon": 110.3827769, "name": "", "operator": "", "kind": "pillar", "address": "", "osm": "node/5504786856"}, {"lat": -6.9927397, "lon": 110.3785383, "name": "", "operator": "", "kind": "pillar", "address": "", "osm": "node/5510170567"}, {"lat": -6.9881272, "lon": 110.4226493, "name": "", "operator": "Wisma HSBC", "kind": "pillar", "address": "", "osm": "node/5510567197"}, {"lat": -6.9881513, "lon": 110.4224118, "name": "", "operator": "Wisma HSBC", "kind": "wall", "address": "", "osm": "node/5510567198"}, {"lat": -6.9881816, "lon": 110.4222388, "name": "", "operator": "Wisma HSBC", "kind": "wall", "address": "", "osm": "node/5510567199"}, {"lat": -6.9874904, "lon": 110.4259899, "name": "", "operator": "Rumah Sakit Telogorejo", "kind": "", "address": "", "osm": "node/5510567217"}, {"lat": -6.9886019, "lon": 110.4212451, "name": "", "operator": "Hotel Santika", "kind": "pillar", "address": "", "osm": "node/5510605629"}, {"lat": -6.9887044, "lon": 110.4210506, "name": "", "operator": "Hotel Santika", "kind": "pillar", "address": "", "osm": "node/5510605630"}, {"lat": -6.9887177, "lon": 110.421182, "name": "", "operator": "Hotel Santika", "kind": "pillar", "address": "", "osm": "node/5510689609"}, {"lat": -6.9887456, "lon": 110.421115, "name": "", "operator": "Hotel Santika", "kind": "pillar", "address": "", "osm": "node/5510689610"}, {"lat": -6.9817212, "lon": 110.3694034, "name": "", "operator": "", "kind": "pillar", "address": "", "osm": "node/5527100830"}, {"lat": -6.9840314, "lon": 110.3701198, "name": "", "operator": "", "kind": "pillar", "address": "", "osm": "node/5527100831"}, {"lat": -6.9904003, "lon": 110.4246086, "name": "", "operator": "Telkomsel;Hotel Grand Arkenso", "kind": "pillar", "address": "", "osm": "node/5531799092"}, {"lat": -6.991939, "lon": 110.3722103, "name": "", "operator": "", "kind": "pillar", "address": "", "osm": "node/5547542860"}, {"lat": -6.990733, "lon": 110.3734428, "name": "", "operator": "", "kind": "pillar", "address": "", "osm": "node/5547542863"}, {"lat": -6.9984682, "lon": 110.3789748, "name": "", "operator": "", "kind": "pillar", "address": "", "osm": "node/5575504069"}], "police": [{"lat": -6.9966879, "lon": 110.4182974, "name": "Polda Jawa Tengah", "operator": "", "kind": "", "address": "Jalan Pahlawan No 18", "osm": "way/232295626"}, {"lat": -6.9862774, "lon": 110.3603102, "name": "Polsek Tugu", "operator": "", "kind": "", "address": "Jalan Walisongo No.4", "osm": "way/293512524"}, {"lat": -6.9823822, "lon": 110.3885408, "name": "Polsek Semarang Barat", "operator": "", "kind": "", "address": "Jalan Ronggolawe Selatan No. 1", "osm": "way/293512732"}, {"lat": -6.9938802, "lon": 110.4061279, "name": "Direktorat Sabhara Subdit Dalmas", "operator": "", "kind": "", "address": "Jalan Dr Sutomo 19", "osm": "way/338457582"}, {"lat": -6.9829001, "lon": 110.434392, "name": "BIDHUMAS Polda Jawa Tengah", "operator": "", "kind": "", "address": "Jalan Dr. Cipto No 107", "osm": "way/339001900"}, {"lat": -6.9949967, "lon": 110.3907113, "name": "Brimob Simongan", "operator": "", "kind": "", "address": "", "osm": "way/339192267"}, {"lat": -6.9682726, "lon": 110.4296521, "name": "Polsek Semarang Utara", "operator": "", "kind": "", "address": "", "osm": "way/340418192"}, {"lat": -6.9978977, "lon": 110.4197941, "name": "Biro Sarpras Polda Jateng", "operator": "", "kind": "", "address": "Jalan Sriwijaya", "osm": "way/341684241"}, {"lat": -6.9909924, "lon": 110.4216287, "name": "Pusat Informasi Lalu Lintas", "operator": "", "kind": "", "address": "Jalan Simpang Lima", "osm": "way/559696433"}, {"lat": -6.9831936, "lon": 110.4241583, "name": "Polsekta Semarang Tengah", "operator": "", "kind": "", "address": "Jalan Bimbingan 41-42 Semarang 50135", "osm": "way/561207871"}, {"lat": -6.9923324, "lon": 110.4057392, "name": "Polrestabes Semarang", "operator": "", "kind": "", "address": "Jalan Dr Sutomo No 19", "osm": "way/562415478"}, {"lat": -6.9758169, "lon": 110.4351122, "name": "Polsek Semarang Timur", "operator": "", "kind": "", "address": "Jalan Dr. Cipto no 66", "osm": "way/564915121"}, {"lat": -6.9681838, "lon": 110.4296542, "name": "Polsek Semarang Utara", "operator": "", "kind": "", "address": "Jalan Letjen Suprapto No.45", "osm": "way/568079420"}, {"lat": -6.9685816, "lon": 110.4289584, "name": "Satpas 1421 Satlantas Polretabes Samarang", "operator": "", "kind": "", "address": "Jalan Letjen Suprapto No 45", "osm": "way/568079422"}, {"lat": -6.997617, "lon": 110.3479919, "name": "Polsek Ngaliyan", "operator": "", "kind": "", "address": "Jalan Prof Dr Hamka No. 234", "osm": "way/582766939"}, {"lat": -6.968792, "lon": 110.4289985, "name": "Satpas 1421 Satlantas Polretabes Samarang", "operator": "", "kind": "", "address": "", "osm": "way/1330742941"}, {"lat": -6.969014, "lon": 110.428905, "name": "Satpas 1421 Satlantas Polretabes Samarang", "operator": "", "kind": "", "address": "", "osm": "way/1330742942"}, {"lat": -6.9775608, "lon": 110.3695761, "name": "Direktorat PAM Obvit Polda Jateng", "operator": "", "kind": "", "address": "Jalan Graha Padma Boulevard A-2", "osm": "way/1422297580"}], "stations": [{"lat": -6.9786705, "lon": 110.4005844, "name": "Dinas Pemadam Kebakaran Kota Semarang", "operator": "", "kind": "", "address": "Jalan Madukoro Raya", "osm": "way/563188453"}, {"lat": -6.9865333, "lon": 110.3584187, "name": "Kantor Pemadam Kebakaran", "operator": "", "kind": "", "address": "Jalan Walisongo", "osm": "way/564500892"}, {"lat": -6.968522, "lon": 110.3770136, "name": "", "operator": "", "kind": "", "address": "", "osm": "way/740895779"}, {"lat": -6.9771843, "lon": 110.3775432, "name": "", "operator": "", "kind": "", "address": "", "osm": "way/1338307869"}]};
+const CLOSED_EDGE = "e14";
+const UNIT = "menit estimasi";
+
+const byId = Object.fromEntries(NODES.map(n => [n.id, n]));
+const esc = s => String(s ?? "").replace(/[&<>"']/g,
+  c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+
+const map = L.map("map", {zoomControl: true});
+const osmTiles = L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+  {maxZoom: 19, attribution: "&copy; OpenStreetMap contributors"});
+const satellite = L.tileLayer(
+  "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+  {maxZoom: 18, attribution: "Tiles &copy; Esri"});
+osmTiles.addTo(map);
+
+// --- lapisan jaringan -------------------------------------------------------
+const gNetwork = L.layerGroup();
+EDGES.forEach(e => {
+  const a = byId[e.from], b = byId[e.to];
+  const line = L.polyline([[a.lat, a.lon], [b.lat, b.lon]],
+    {color: "#94a3b8", weight: 3, opacity: .65});
+  line.bindPopup(
+    `<div class="popup"><b>${esc(e.road || e.id)}</b><br>
+     <span class="id">${esc(e.id)} · ${esc(e.from)} → ${esc(e.to)}</span><br>
+     ${e.weight} ${esc(UNIT)}${e.closed ? '<br><span class="badge red">ditutup kerumunan</span>' : ""}
+     ${e.route === "initial" ? '<span class="badge blue">rute awal</span>' : ""}
+     ${e.route === "alternate" ? '<span class="badge orange">rute alternatif</span>' : ""}</div>`);
+  line.addTo(gNetwork);
+});
+
+// --- lapisan rute -----------------------------------------------------------
+function routeLine(ids, opts) {
+  const pts = ids.map(id => [byId[id].lat, byId[id].lon]);
+  // Casing putih agar garis rute tetap terbaca di atas peta jalan padat.
+  const casing = L.polyline(pts,
+    {color: "#ffffff", weight: opts.weight + 4, opacity: .8});
+  const line = L.polyline(pts, opts);
+  return L.layerGroup([casing, line]);
+}
+const gInitial = L.layerGroup().addLayer(
+  routeLine(ROUTES.initial.nodes, {color: "#1d4ed8", weight: 6, opacity: .9}));
+const gAlternate = ROUTES.alternate ? L.layerGroup().addLayer(
+  routeLine(ROUTES.alternate.nodes,
+    {color: "#f59e0b", weight: 6, opacity: .9, dashArray: "12, 9"})) : L.layerGroup();
+
+// --- ruas tertutup ----------------------------------------------------------
+const gClosed = L.layerGroup();
+EDGES.filter(e => e.closed).forEach(e => {
+  const a = byId[e.from], b = byId[e.to];
+  const pts = [[a.lat, a.lon], [b.lat, b.lon]];
+  L.polyline(pts, {color: "#ffffff", weight: 11, opacity: .8}).addTo(gClosed);
+  const line = L.polyline(pts,
+    {color: "#dc2626", weight: 7, opacity: .95, dashArray: "6, 7"});
+  line.bindPopup(`<div class="popup"><b>Ruas ditutup kerumunan</b><br>
+     <span class="id">${esc(e.id)} · ${esc(e.road)}</span><br>
+     ${esc(window.CLOSURE_NOTE || "")}</div>`);
+  line.addTo(gClosed);
+});
+
+// --- node -------------------------------------------------------------------
+function timeColor(m) {
+  if (m === "start") return "#22c55e";
+  if (m === "goal") return "#ef4444";
+  if (m <= 3) return "#22c55e";
+  if (m <= 6) return "#eab308";
+  if (m <= 9) return "#f97316";
+  return "#ef4444";
+}
+const gNodes = L.layerGroup();
+NODES.forEach(n => {
+  const isStart = n.id === "pos_damkar_madukoro", isGoal = n.id === "pasar_johar_relokasi";
+  const color = timeColor(isStart ? "start" : isGoal ? "goal" : n.minutes);
+  const marker = L.circleMarker([n.lat, n.lon], {
+    radius: isStart || isGoal ? 9 : 7,
+    color: "#0f172a", weight: 2, fillColor: color, fillOpacity: .95
+  });
+  const badges = n.roles.map(r =>
+    `<span class="badge ${r === "rute awal" ? "blue" : r === "rute alternatif" ? "orange"
+      : r === "titik awal" ? "green" : r === "tujuan" ? "red" : "purple"}">${esc(r)}</span>`).join("");
+  let facility = "";
+  if (n.hydrant) {
+    facility += n.hydrant.verified
+      ? `<br>💧 Hydrant <b>terverifikasi OSM</b>: ${esc(n.hydrant.name || "-")}
+         (${esc(n.hydrant.osm_node)}), ${esc(n.hydrant.distance_m)} m dari node`
+      : `<br>💧 Hydrant <span class="muted">asumsi model</span>`
+        + (n.hydrant.nearest_osm_m ? ` (OSM terdekat ${esc(n.hydrant.nearest_osm_m)} m)` : "");
+  } else {
+    facility += `<br>🚫 Tanpa hydrant (node kantor polisi)`;
+  }
+  if (n.facility) {
+    if (n.facility.type === "police_station") {
+      facility += `<br>🚔 ${esc(n.facility.name)} (${esc(n.facility.distance_m)} m, ${esc(n.facility.address || "")})`;
+    } else {
+      facility += `<br>🚒 Kantor damkar: ${esc(n.facility.trucks)} mobil, `
+        + `${esc(n.facility.personnel)} personel <span class="muted">(asumsi model)</span>`;
+    }
+  }
+  marker.bindPopup(`<div class="popup"><b>${esc(n.label)}</b><br>
+    <span class="id">${esc(n.id)}</span><br>${badges}<br>
+    ⏱ ${esc(n.minutes)} ${esc(UNIT)} dari pos damkar${facility}</div>`);
+  marker.addTo(gNodes);
+});
+
+// --- fasilitas OSM ----------------------------------------------------------
+const gOsm = L.layerGroup();
+OSM.hydrants.forEach(h => {
+  L.circleMarker([h.lat, h.lon], {radius: 5, color: "#0c4a6e", weight: 2,
+      fillColor: "#0ea5e9", fillOpacity: .95})
+    .bindPopup(`<div class="popup"><b>💧 ${esc(h.name || "Hydrant")}</b><br>
+      <span class="id">${esc(h.osm)}</span><br>jenis: ${esc(h.kind || "-")} ·
+      pengelola: ${esc(h.operator || "-")}</div>`)
+    .addTo(gOsm);
+});
+OSM.police.forEach(p => {
+  L.circleMarker([p.lat, p.lon], {radius: 6, color: "#0f172a", weight: 2,
+      fillColor: "#1e3a8a", fillOpacity: .95})
+    .bindPopup(`<div class="popup"><b>🚔 ${esc(p.name || "Kantor polisi")}</b><br>
+      <span class="id">${esc(p.osm)}</span>${p.address ? "<br>" + esc(p.address) : ""}</div>`)
+    .addTo(gOsm);
+});
+OSM.stations.forEach(s => {
+  L.circleMarker([s.lat, s.lon], {radius: 6, color: "#0f172a", weight: 2,
+      fillColor: "#b91c1c", fillOpacity: .95})
+    .bindPopup(`<div class="popup"><b>🚒 ${esc(s.name || "Kantor damkar")}</b><br>
+      <span class="id">${esc(s.osm)}</span>${s.address ? "<br>" + esc(s.address) : ""}</div>`)
+    .addTo(gOsm);
+});
+
+// --- kontrol lapisan & tampilan awal ---------------------------------------
+const overlays = {
+  "Jaringan (bisa dilalui damkar)": gNetwork,
+  "Rute awal": gInitial,
+  "Rute alternatif": gAlternate,
+  "Ruas tertutup": gClosed,
+  "Node & waktu tempuh": gNodes,
+  "Fasilitas OSM": gOsm
+};
+L.control.layers({"Peta jalan": osmTiles, "Citra satelit": satellite}, overlays,
+  {collapsed: false}).addTo(map);
+[gNetwork, gInitial, gAlternate, gClosed, gNodes].forEach(l => l.addTo(map));
+if (OSM.hydrants.length || OSM.police.length || OSM.stations.length) gOsm.addTo(map);
+
+const bounds = L.latLngBounds(NODES.map(n => [n.lat, n.lon]));
+map.fitBounds(bounds.pad(0.08));
+L.control.scale({imperial: false}).addTo(map);
+window.CLOSURE_NOTE = "Kerumunan warga yang menonton memadati akses utara Jl. Barito (ruas simpang Kartini menuju pasar); akses damkar lewat Jl. Barito terputus sehingga armada harus memutar ke koridor selatan.";
+</script>
+</body>
+</html>
