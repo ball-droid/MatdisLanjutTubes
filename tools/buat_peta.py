@@ -85,6 +85,33 @@ def _points(elements: list[dict]) -> list[dict]:
     return out
 
 
+def osrm_geometry(lat1: float, lon1: float, lat2: float, lon2: float) -> list[list[float]] | None:
+    """Geometri rute mengemudi (OSRM) antara dua titik, format [[lat, lon], ...].
+
+    Dipakai agar garis abu-abu jaringan dan garis rute mengikuti jalan
+    sungguhan, bukan garis lurus antar node. None bila OSRM tidak menjawab
+    (pemanggil memakai garis lurus sebagai cadangan).
+    """
+    url = (
+        f"https://router.project-osrm.org/route/v1/driving/"
+        f"{lon1},{lat1};{lon2},{lat2}?overview=full&geometries=geojson"
+    )
+    try:
+        with urllib.request.urlopen(
+            urllib.request.Request(url, headers={"User-Agent": UA}), timeout=60
+        ) as handle:
+            data = json.load(handle)
+    except Exception:  # noqa: BLE001 - jaringan/gagal rate-limit -> garis lurus
+        return None
+    routes = data.get("routes") or []
+    if not routes:
+        return None
+    return [
+        [round(lat, 6), round(lon, 6)]
+        for lon, lat in routes[0]["geometry"]["coordinates"]
+    ]
+
+
 def fetch_osm_facilities(nodes: list[dict]) -> dict[str, list[dict]]:
     """Ambil hydrant, kantor polisi, dan kantor damkar dari OSM untuk peta."""
     lats = [node["lat"] for node in nodes]
@@ -172,11 +199,19 @@ def build_payload(scenario_path: Path, with_osm: bool) -> dict:
 
     edges = []
     seen = set()
+    straight_fallback = 0
     for source in graph.nodes:
         for edge in graph.neighbors(source):
             if edge.edge_id in seen:
                 continue
             seen.add(edge.edge_id)
+            geometry = None
+            if with_osm and source in coordinates and edge.target in coordinates:
+                src, dst = coordinates[source], coordinates[edge.target]
+                geometry = osrm_geometry(src[0], src[1], dst[0], dst[1])
+                if geometry is None:
+                    straight_fallback += 1
+                time.sleep(0.2)
             edges.append(
                 {
                     "id": edge.edge_id,
@@ -190,8 +225,29 @@ def build_payload(scenario_path: Path, with_osm: bool) -> dict:
                         else None
                     ),
                     "closed": edge.edge_id == closure,
+                    "geometry": geometry,
                 }
             )
+
+    # Rute dari tiap kantor damkar tambahan ke pasar: node logistik yang
+    # ditambahkan harus benar-benar dilewati damkar, bukan cabang menggantung.
+    deploy_routes = []
+    for node_id, fields in node_facilities.items():
+        if (fields.get("facility") or {}).get("type") != "fire_station":
+            continue
+        result = dijkstra(graph, node_id, goal)
+        if result is None:
+            continue
+        deploy_routes.append(
+            {
+                "from": node_id,
+                "label": graph.nodes.get(node_id, node_id),
+                "cost": round(result.cost, 2),
+                "edges": len(result.edges),
+                "nodes": result.nodes,
+            }
+        )
+    deploy_routes.sort(key=lambda item: item["cost"])
 
     metadata = scenario.get("metadata") or {}
     payload = {
@@ -221,6 +277,8 @@ def build_payload(scenario_path: Path, with_osm: bool) -> dict:
                 if alternate else None
             ),
         },
+        "deploy": deploy_routes,
+        "straight_fallback": straight_fallback,
         "osm": {"hydrants": [], "police": [], "stations": []},
         "with_osm": False,
         "fact_note": str(metadata.get("facility_note", "")),
@@ -296,6 +354,7 @@ TEMPLATE = """<!DOCTYPE html>
     <div class="legend-item"><span class="swatch" style="background:#94a3b8"></span> Jaringan jalan yang bisa dilalui damkar</div>
     <div class="legend-item"><span class="swatch" style="background:#1d4ed8"></span> Rute awal (tercepat)</div>
     <div class="legend-item"><span class="swatch" style="background:#f59e0b"></span> Rute alternatif setelah kerumunan menutup <code>__CLOSED__</code></div>
+    <div class="legend-item"><span class="swatch" style="background:#7c3aed"></span> Rute dari kantor damkar tambahan → pasar (node logistik <b>dilewati</b> damkar)</div>
     <div class="legend-item"><span class="swatch" style="background:#dc2626"></span> Ruas tertutup kerumunan (event berita)</div>
 
     <h2>Warna node = waktu dari pos damkar</h2>
@@ -315,8 +374,10 @@ TEMPLATE = """<!DOCTYPE html>
     <div class="legend-item"><span class="swatch" style="background:#b91c1c;height:13px;width:13px;border-radius:50%"></span> Kantor damkar asli di OSM</div>
 
     <div class="note">Semua node dan ruas pada peta ini <b>bisa dilalui mobil damkar</b> menurut model
-    (graf tidak berarah). Klik node untuk melihat waktu tempuh dari pos, status hydrant,
-    dan fasilitasnya; klik ruas untuk melihat bobot dan nama jalan.</div>
+    (graf tidak berarah), dan seluruh garis mengikuti jalan sungguhan (geometri OSRM).
+    Setiap node kantor damkar yang ditambahkan <b>dilewati oleh rute ungu</b> dari kantor
+    tersebut ke pasar — bukan cabang menggantung. Klik node untuk melihat waktu tempuh
+    dari pos, status hydrant, dan fasilitasnya; klik ruas untuk bobot dan nama jalan.</div>
     <div class="note warn">Hydrant di simpang selain yang bertanda "terverifikasi OSM" adalah
     <b>asumsi model</b>; kantor polisi, kantor damkar, dan hydrant berwarna biru tua/merah berasal
     langsung dari OpenStreetMap (ekstraksi __GENERATED__).</div>
@@ -332,6 +393,7 @@ TEMPLATE = """<!DOCTYPE html>
 const NODES = __NODES__;
 const EDGES = __EDGES__;
 const ROUTES = __ROUTES__;
+const DEPLOY = __DEPLOY__;
 const OSM = __OSM__;
 const CLOSED_EDGE = "__CLOSED__";
 const UNIT = "__UNIT__";
@@ -339,6 +401,43 @@ const UNIT = "__UNIT__";
 const byId = Object.fromEntries(NODES.map(n => [n.id, n]));
 const esc = s => String(s ?? "").replace(/[&<>"']/g,
   c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+
+// Geometri tiap ruas (mengikuti jalan sungguhan hasil OSRM); bila kosong
+// (mode offline / OSRM gagal) dipakai garis lurus antar node.
+const edgeGeo = {};
+EDGES.forEach(e => {
+  const a = byId[e.from], b = byId[e.to];
+  const g = e.geometry && e.geometry.length >= 2
+    ? e.geometry
+    : [[a.lat, a.lon], [b.lat, b.lon]];
+  edgeGeo[e.from + ">" + e.to] = g;
+  edgeGeo[e.to + ">" + e.from] = g.slice().reverse();
+});
+
+// Gabungkan geometri sepanjang rute supaya garis rute ikut jalan, bukan
+// memotong blok.
+function routePoints(ids) {
+  const pts = [];
+  for (let i = 0; i < ids.length - 1; i++) {
+    const g = edgeGeo[ids[i] + ">" + ids[i + 1]];
+    if (!g) {
+      const n = byId[ids[i]];
+      pts.push([n.lat, n.lon]);
+      continue;
+    }
+    if (!pts.length) pts.push(g[0]);
+    for (const p of g) {
+      const last = pts[pts.length - 1];
+      if (p[0] !== last[0] || p[1] !== last[1]) pts.push(p);
+    }
+  }
+  const lastNode = byId[ids[ids.length - 1]];
+  const last = pts[pts.length - 1];
+  if (!last || last[0] !== lastNode.lat || last[1] !== lastNode.lon) {
+    pts.push([lastNode.lat, lastNode.lon]);
+  }
+  return pts;
+}
 
 const map = L.map("map", {zoomControl: true});
 // Tile resmi tile.openstreetmap.org menolak permintaan dari halaman lokal
@@ -357,9 +456,9 @@ streetTiles.addTo(map);
 // --- lapisan jaringan -------------------------------------------------------
 const gNetwork = L.layerGroup();
 EDGES.forEach(e => {
-  const a = byId[e.from], b = byId[e.to];
-  const line = L.polyline([[a.lat, a.lon], [b.lat, b.lon]],
-    {color: "#94a3b8", weight: 3, opacity: .65});
+  const pts = edgeGeo[e.from + ">" + e.to];
+  const line = L.polyline(pts,
+    {color: "#94a3b8", weight: 3, opacity: .65, lineJoin: "round"});
   line.bindPopup(
     `<div class="popup"><b>${esc(e.road || e.id)}</b><br>
      <span class="id">${esc(e.id)} · ${esc(e.from)} → ${esc(e.to)}</span><br>
@@ -370,25 +469,47 @@ EDGES.forEach(e => {
 });
 
 // --- lapisan rute -----------------------------------------------------------
-function routeLine(ids, opts) {
-  const pts = ids.map(id => [byId[id].lat, byId[id].lon]);
+function routeLine(ids, opts, popupHtml) {
+  const pts = routePoints(ids);
   // Casing putih agar garis rute tetap terbaca di atas peta jalan padat.
   const casing = L.polyline(pts,
-    {color: "#ffffff", weight: opts.weight + 4, opacity: .8});
+    {color: "#ffffff", weight: opts.weight + 4, opacity: .8, lineJoin: "round"});
   const line = L.polyline(pts, opts);
+  if (popupHtml) line.bindPopup(popupHtml);
   return L.layerGroup([casing, line]);
 }
-const gInitial = L.layerGroup().addLayer(
-  routeLine(ROUTES.initial.nodes, {color: "#1d4ed8", weight: 6, opacity: .9}));
-const gAlternate = ROUTES.alternate ? L.layerGroup().addLayer(
-  routeLine(ROUTES.alternate.nodes,
-    {color: "#f59e0b", weight: 6, opacity: .9, dashArray: "12, 9"})) : L.layerGroup();
+function routePopup(title, r) {
+  return `<div class="popup"><b>${esc(title)}</b><br>
+    <span class="id">${esc(r.from || "rute utama")} → ${esc("__GOAL__")}</span><br>
+    ${esc(r.cost)} ${esc(UNIT)} · ${esc(r.edges)} ruas</div>`;
+}
+const gInitial = L.layerGroup().addLayer(routeLine(ROUTES.initial.nodes,
+  {color: "#1d4ed8", weight: 6, opacity: .9},
+  routePopup("Rute awal (tercepat)", {cost: ROUTES.initial.cost,
+    edges: ROUTES.initial.edges, from: "__START__"})));
+const gAlternate = ROUTES.alternate ? L.layerGroup().addLayer(routeLine(
+  ROUTES.alternate.nodes,
+  {color: "#f59e0b", weight: 6, opacity: .9, dashArray: "12, 9"},
+  routePopup("Rute alternatif setelah " + CLOSED_EDGE + " ditutup",
+    {cost: ROUTES.alternate.cost, edges: ROUTES.alternate.edges,
+     from: "__START__"}))) : L.layerGroup();
+
+// --- rute dari kantor damkar tambahan (node logistik dilewati damkar) -------
+const gDeploy = L.layerGroup();
+DEPLOY.forEach(r => {
+  const layer = routeLine(r.nodes,
+    {color: "#7c3aed", weight: 5, opacity: .9},
+    `<div class="popup"><b>🚒 Rute dari kantor damkar</b><br>
+     <span class="id">${esc(r.from)}</span><br>${esc(r.label)}<br>
+     ${esc(r.cost)} ${esc(UNIT)} · ${esc(r.edges)} ruas ·
+     node tambahan ini <b>dilewati</b> oleh rute ini</div>`);
+  layer.addTo(gDeploy);
+});
 
 // --- ruas tertutup ----------------------------------------------------------
 const gClosed = L.layerGroup();
 EDGES.filter(e => e.closed).forEach(e => {
-  const a = byId[e.from], b = byId[e.to];
-  const pts = [[a.lat, a.lon], [b.lat, b.lon]];
+  const pts = edgeGeo[e.from + ">" + e.to];
   L.polyline(pts, {color: "#ffffff", weight: 11, opacity: .8}).addTo(gClosed);
   const line = L.polyline(pts,
     {color: "#dc2626", weight: 7, opacity: .95, dashArray: "6, 7"});
@@ -472,13 +593,14 @@ const overlays = {
   "Jaringan (bisa dilalui damkar)": gNetwork,
   "Rute awal": gInitial,
   "Rute alternatif": gAlternate,
+  "Rute dari kantor damkar": gDeploy,
   "Ruas tertutup": gClosed,
   "Node & waktu tempuh": gNodes,
   "Fasilitas OSM": gOsm
 };
 L.control.layers({"Peta jalan": streetTiles, "Citra satelit": satellite}, overlays,
   {collapsed: false}).addTo(map);
-[gNetwork, gInitial, gAlternate, gClosed, gNodes].forEach(l => l.addTo(map));
+[gNetwork, gInitial, gAlternate, gDeploy, gClosed, gNodes].forEach(l => l.addTo(map));
 if (OSM.hydrants.length || OSM.police.length || OSM.stations.length) gOsm.addTo(map);
 
 const bounds = L.latLngBounds(NODES.map(n => [n.lat, n.lon]));
@@ -512,6 +634,7 @@ def render(payload: dict) -> str:
         .replace("__NODES__", json.dumps(payload["nodes"], ensure_ascii=False))
         .replace("__EDGES__", json.dumps(payload["edges"], ensure_ascii=False))
         .replace("__ROUTES__", json.dumps(payload["routes"], ensure_ascii=False))
+        .replace("__DEPLOY__", json.dumps(payload["deploy"], ensure_ascii=False))
         .replace("__OSM__", json.dumps(payload["osm"], ensure_ascii=False))
         .replace("__UNIT__", html.escape(payload["unit"]))
         .replace("__START__", payload["start"])
@@ -544,13 +667,26 @@ def main() -> int:
         f"rute awal {payload['routes']['initial']['cost']} "
         f"({payload['routes']['initial']['edges']} ruas)"
     )
+    for route in payload["deploy"]:
+        print(
+            f"rute dari {route['from']}: {route['cost']} "
+            f"({route['edges']} ruas) - node tambahan dilewati"
+        )
     if payload["with_osm"]:
         print(
             f"OSM: hydrant={len(osm['hydrants'])} kantor polisi={len(osm['police'])} "
             f"kantor damkar={len(osm['stations'])}"
         )
+        print(
+            f"geometri jalan: {len(payload['edges']) - payload['straight_fallback']}"
+            f"/{len(payload['edges'])} ruas mengikuti rute OSRM"
+            + (
+                f", {payload['straight_fallback']} memakai garis lurus"
+                if payload["straight_fallback"] else ""
+            )
+        )
     else:
-        print("Mode --tanpa-osm: lapisan fasilitas OSM dikosongkan.")
+        print("Mode --tanpa-osm: lapisan fasilitas OSM dan geometri jalan dilewati.")
     return 0
 
 
