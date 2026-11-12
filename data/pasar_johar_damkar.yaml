@@ -39,6 +39,13 @@
 #     Cipto no 66) sehingga menjadi node kantor polisi TANPA hydrant.
 #   - 3 kantor pemadam tambahan dalam radius 5 km ditambahkan sebagai node
 #     logistik (armada/personel = asumsi model).
+#
+# Rute alternatif multi-unit (blok `alternatives` pada simulation):
+#   1. koridor selatan - kawalan polisi (lewat Polsek Semarang Timur);
+#   2. via IGD RSUP Dr. Kariadi - bantuan ambulance;
+#   3. kawalan BIDHUMAS Polda Jateng + akses Tirtoyoso XI.
+#   Tiap unit damkar mendapat rute BERBEDA; seluruh node jaringan (36) tercakup
+#   oleh gabungan rute awal,3 rute alternatif, dan3 rute dari kantor damkar.
 
 metadata:
   case_id: "pasar_johar_2022_damkar_jaringan_jalan_asli"
@@ -51,8 +58,8 @@ metadata:
   destination_coord: "-6.9787493,110.4411586"
   reported_fact: "Kerumunan warga yang menonton membuat jalanan macet, termasuk akses jalan menuju Pasar Johar Relokasi, sehingga kendaraan damkar sulit menembus."
   graph_source: "OpenStreetMap via Overpass API (ekstraksi 2026-11-10), disederhanakan menjadi simpang-simpang utama"
-  node_count: 34
-  edge_count: 36
+  node_count: 36
+  edge_count: 38
   weight_rule: "menit = jarak_meter / (kecepatan_model km/jam) x 60; utama 35, sekunder 30, permukiman 20"
   display_weight_unit: "menit estimasi"
   weight_basis:
@@ -86,13 +93,17 @@ metadata:
     pemadam tambahan (radius 5 km) dijadikan node logistik. Node lain memakai
     hydrant asumsi model dengan jejak jarak ke hydrant OSM terdekat. Jumlah
     mobil dan personel tiap kantor adalah asumsi model - tidak tersedia di
-    berita maupun OSM.
+    berita maupun OSM. Ditambah satu rumah sakit (RSUP Dr. Kariadi,
+    emergency=yes terverifikasi; jumlah ambulance asumsi model) dan satu
+    kantor polisi (BIDHUMAS Polda Jateng) sebagai tujuan rute alternatif.
+    blok `alternatives` memuat3 rute berbeda untuk3 unit damkar.
+
   verification:
     checked_on: "2026-11-10"
     node_osm_match: "31/31 node ada di OpenStreetMap dan koordinatnya cocok"
     road_name_match: "28/28 nama ruas cocok dengan nama jalan OpenStreetMap"
     graph_connected: "satu komponen; semua node terjangkau dari titik awal dan dapat mencapai tujuan"
-    facility_osm_match: "31/31 node lama terklasifikasi (1 hydrant OSM 251 m, 1 kantor polisi 32 m, 29 hydrant model); 3 kantor damkar OSM radius 5 km menjadi node logistik"
+    facility_osm_match: "36/36 node terklasifikasi:1 hydrant OSM terverifikasi,33 hydrant asumsi model,2 node kantor polisi tanpa hydrant,3 kantor damkar,1 rumah sakit (IGD emergency=yes) - seluruh fasilitas ada di OSM"
   not_verified:
     - "aturan satu arah yang berlaku pada 2 Februari 2022"
     - "posisi persimpangan persis pada peta resmi (koordinat sudah ada, belum diperiksa satu per satu)"
@@ -100,6 +111,7 @@ metadata:
     - "keberadaan seluruh simpang pemutar yang diperlukan bila aturan satu arah diterapkan"
     - "hydrant di 29 simpang (asumsi model; hydrant OSM terdekat 335-2076 m)"
     - "jumlah mobil dan personel tiap kantor damkar (asumsi model)"
+    - "jumlah ambulance di RSUP Dr. Kariadi (asumsi model; emergency=yes terverifikasi)"
   fact_boundary:
     from_news: "kebakaran di Pasar Johar Relokasi blok F pada 2 Februari 2022; kerumunan warga membuat akses jalan menuju pasar macet dan menyulitkan damkar"
     from_map_model: "titik awal, titik tujuan, topologi jaringan, nama ruas, koordinat, bobot per ruas, dan fasilitas node (hydrant, kantor polisi, kantor damkar tambahan)"
@@ -471,6 +483,34 @@ nodes:
       trucks: 3
       personnel: 10
       logistics_note: "asumsi model: jumlah mobil/personel tidak tersedia di berita maupun OSM"
+  - id: rumah_sakit_kariadi
+    label: "Rumah Sakit Umum Pusat Dr. Kariadi (IGD 24 jam)"
+    lat: -6.9934226
+    lon: 110.4088241
+    osm_way: 155565070
+    hydrant:
+      verified: false
+      distance_m: 0
+      source: "asumsi model: rumah sakit memiliki sumber air sendiri"
+    facility:
+      type: hospital
+      verified: true
+      emergency: true
+      ambulances: 3
+      address: "Jl. Dr. Sutomo No 16"
+      logistics_note: "asumsi model: jumlah ambulance; emergency=yes dan IGD 24 jam terverifikasi di OSM"
+  - id: polisi_polda_jateng
+    label: "BIDHUMAS Polda Jawa Tengah"
+    lat: -6.9829001
+    lon: 110.434392
+    osm_way: 339001900
+    facility:
+      type: police_station
+      verified: true
+      name: "BIDHUMAS Polda Jawa Tengah"
+      address: "Jl. Dr. Cipto No 107"
+      distance_m: 0
+
 edges:
   - id: e01
     from: pos_damkar_madukoro
@@ -693,6 +733,21 @@ edges:
     road: "Jl. Walisongo (koneksi model)"
     distance_m: 4775
     connection: model
+  - id: e_log04
+    from: rumah_sakit_kariadi
+    to: simpang_sutomo_pandanaran
+    weight: 3.69
+    road: "Jl. Dr. Sutomo (koneksi model)"
+    distance_m: 1230
+    connection: model
+  - id: e_log05
+    from: polisi_polda_jateng
+    to: simpang_panjaitan_haryono
+    weight: 2.11
+    road: "koneksi model ke jaringan (nama jalan belum terverifikasi)"
+    distance_m: 705
+    connection: model
+
 simulation:
   title: "Pos Damkar Madukoro ke Relokasi Pasar Johar (Semarang, 2 Februari 2022)"
   start: pos_damkar_madukoro
@@ -700,3 +755,28 @@ simulation:
   blocked_edges: []
   closure_edge: e14
   closure_description: "Kerumunan warga yang menonton memadati akses utara Jl. Barito (ruas simpang Kartini menuju pasar); akses damkar lewat Jl. Barito terputus sehingga armada harus memutar ke koridor selatan."
+  alternatives:
+    - id: selatan_kawalan_polisi
+      label: "Koridor selatan - kawalan polisi"
+      purpose: >-
+        Rute tercepat setelah e14 ditutup; melewati Polsek Semarang Timur
+        (simpang_cipto_bugangan) sehingga menjadi perumpaan kawalan polisi
+        menuju pasar.
+      waypoints: []
+    - id: bantuan_ambulance
+      label: "Via IGD rumah sakit - bantuan ambulance"
+      purpose: >-
+        Mampir ke IGD RSUP Dr. Kariadi (emergency=yes,24 jam) untuk
+        koordinasi ambulance sebelum lanjut ke pasar lewat koridor
+        Mayjend D.I. Panjaitan - M.T. Haryono.
+      waypoints:
+        - rumah_sakit_kariadi
+    - id: kawalan_polda_akses_tirtoyoso
+      label: "Kawalan Polda + akses Tirtoyoso XI"
+      purpose: >-
+        Mampir ke BIDHUMAS Polda Jawa Tengah untuk kawalan, lalu masuk ke
+        pasar lewat Jl. Tirtoyoso XI (e16-e15-e18) alih-alih Jl. Tirtoyoso V.
+      waypoints:
+        - polisi_polda_jateng
+        - simpang_tirtoyoso_xi
+

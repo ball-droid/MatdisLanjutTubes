@@ -197,16 +197,24 @@ def test_default_scenario_facility_inventory():
         if (fields.get("facility") or {}).get("type") == "fire_station"
     ]
 
-    assert len(graph.nodes) == 34
-    assert police_nodes == ["simpang_cipto_bugangan"]
-    assert "hydrant" not in entries["simpang_cipto_bugangan"]
+    assert len(graph.nodes) == 36
+    assert sorted(police_nodes) == ["polisi_polda_jateng", "simpang_cipto_bugangan"]
+    for node_id in police_nodes:
+        assert "hydrant" not in entries[node_id]
     assert sorted(fire_stations) == [
         "pos_damkar_tambahan_barat",
         "pos_damkar_tambahan_utara",
         "pos_damkar_tambahan_walisongo",
     ]
-    # 34 node - 1 kantor polisi = 33 node ber-hydrant.
-    assert len(hydrant_nodes) == 33
+    hospitals = [
+        node_id for node_id, fields in entries.items()
+        if (fields.get("facility") or {}).get("type") == "hospital"
+    ]
+    assert hospitals == ["rumah_sakit_kariadi"]
+    assert entries["rumah_sakit_kariadi"]["facility"]["ambulances"] == 3
+    assert entries["rumah_sakit_kariadi"]["facility"]["emergency"] is True
+    # 36 node - 2 kantor polisi = 34 node ber-hydrant.
+    assert len(hydrant_nodes) == 34
 
     verified = entries["simpang_depok_wahidhasyim"]["hydrant"]
     assert verified["verified"] is True

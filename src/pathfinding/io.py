@@ -14,7 +14,7 @@ import yaml
 from .graph import Graph
 
 _MAP_FIELDS = {"lat", "lon", "osm_node"}
-_FACILITY_TYPES = {"fire_station", "police_station"}
+_FACILITY_TYPES = {"fire_station", "police_station", "hospital"}
 
 
 def _validate_facilities(items: list[Any], metadata: dict[str, Any]) -> None:
@@ -104,6 +104,18 @@ def _validate_facility(value: Any, node_id: str) -> None:
                     f"Kantor damkar pada node {node_id!r} wajib memuat '{field_name}' "
                     f"berupa bilangan bulat >= 0, diterima: {count!r}."
                 )
+    elif kind == "hospital":
+        ambulances = value.get("ambulances")
+        if isinstance(ambulances, bool) or not isinstance(ambulances, int) or ambulances < 0:
+            raise ValueError(
+                f"Rumah sakit pada node {node_id!r} wajib memuat 'ambulances' "
+                f"berupa bilangan bulat >= 0, diterima: {ambulances!r}."
+            )
+        if not isinstance(value.get("emergency"), bool):
+            raise ValueError(
+                f"Rumah sakit pada node {node_id!r} wajib memuat 'emergency' boolean "
+                "(true bila IGD/darurat ada di OSM)."
+            )
     else:
         name = value.get("name")
         if not isinstance(name, str) or not name.strip():
@@ -256,6 +268,7 @@ def _load_scenario_block(data: dict[str, Any], graph: Graph) -> dict[str, Any]:
         scenario.setdefault("events", [])
         scenario.setdefault("metadata", data.get("metadata") or {})
         scenario.setdefault("blocked_edges", [])
+        scenario.setdefault("alternatives", [])
     else:
         plan = data.get("execution_plan")
         if plan is None:
@@ -301,3 +314,37 @@ def _validate_scenario_references(scenario: dict[str, Any], graph: Graph) -> Non
         edge_id = str(item)
         if edge_id not in graph.edge_ids:
             raise ValueError(f"blocked_edges berisi ruas yang tidak dikenal: {edge_id!r}.")
+
+    _validate_alternatives(scenario, graph)
+
+
+def _validate_alternatives(scenario: dict[str, Any], graph: Graph) -> None:
+    """Validasi blok `alternatives`: rute berbeda untuk tiap unit damkar."""
+    alternatives = scenario.get("alternatives") or []
+    if not isinstance(alternatives, list):
+        raise ValueError("Field 'alternatives' harus berupa daftar.")
+    seen_ids: set[str] = set()
+    for index, item in enumerate(alternatives, start=1):
+        if not isinstance(item, dict):
+            raise ValueError(f"Setiap alternatif harus berupa object (alternatif ke-{index}).")
+        alt_id = str(item.get("id", "")).strip()
+        if not alt_id:
+            raise ValueError(f"Alternatif ke-{index} wajib memiliki 'id'.")
+        if alt_id in seen_ids:
+            raise ValueError(f"ID alternatif duplikat: {alt_id!r}.")
+        seen_ids.add(alt_id)
+        label = item.get("label")
+        if not isinstance(label, str) or not label.strip():
+            raise ValueError(f"Alternatif {alt_id!r} wajib memiliki 'label'.")
+        purpose = item.get("purpose")
+        if purpose is not None and not isinstance(purpose, str):
+            raise ValueError(f"Field 'purpose' alternatif {alt_id!r} harus teks.")
+        waypoints = item.get("waypoints") or []
+        if not isinstance(waypoints, list):
+            raise ValueError(f"Field 'waypoints' alternatif {alt_id!r} harus daftar.")
+        for waypoint in waypoints:
+            node_id = str(waypoint)
+            if not graph.has_node(node_id):
+                raise ValueError(
+                    f"Waypoint alternatif {alt_id!r} tidak dikenal dalam graf: {node_id!r}."
+                )

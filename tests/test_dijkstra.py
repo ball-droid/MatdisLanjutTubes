@@ -139,16 +139,22 @@ def _street_sequence(graph, nodes):
     return streets
 
 
-def test_damkar_scenario_uses_default_and_has_thirty_four_nodes():
+def test_damkar_scenario_uses_default_and_has_thirty_six_nodes():
     graph, scenario = load_scenario(DEFAULT_SCENARIO)
     assert DEFAULT_SCENARIO.name == "pasar_johar_damkar.yaml"
-    # 31 simpang jalan asli + 3 kantor pemadam tambahan (node logistik).
-    assert len(graph.nodes) == 34
+    # 31 simpang jalan + 3 kantor damkar + rumah sakit + kantor polisi Polda.
+    assert len(graph.nodes) == 36
     edge_ids = {edge.edge_id for node_id in graph.nodes for edge in graph.neighbors(node_id)}
-    # 33 ruas jalan + 3 koneksi kantor damkar ke jaringan.
-    assert len(edge_ids) == 36
+    # 33 ruas jalan + 5 koneksi fasilitas ke jaringan.
+    assert len(edge_ids) == 38
     assert scenario["start"] == "pos_damkar_madukoro"
     assert scenario["goal"] == "pasar_johar_relokasi"
+    # Tiap unit damkar mendapat rute alternatifnya sendiri.
+    assert [alt["id"] for alt in scenario["alternatives"]] == [
+        "selatan_kawalan_polisi",
+        "bantuan_ambulance",
+        "kawalan_polda_akses_tirtoyoso",
+    ]
 
 
 def test_damkar_every_edge_has_street_name_and_positive_weight():
@@ -165,7 +171,7 @@ def test_damkar_every_edge_has_street_name_and_positive_weight():
                 assert edge.road_name, edge.edge_id
             else:
                 assert edge.road_name.startswith("Jl. "), edge.edge_id
-    assert len(seen) == 36
+    assert len(seen) == 38
 
 
 def test_damkar_initial_route_follows_northern_corridor():
@@ -401,8 +407,8 @@ def test_simulation_lists_every_node_and_edge(capsys):
     assert run_simulation(DEFAULT_SCENARIO) == 0
     output = capsys.readouterr().out
     graph, _ = load_scenario(DEFAULT_SCENARIO)
-    assert "DAFTAR NODE (34 node)" in output
-    assert "DAFTAR RUAS JALAN (36 ruas)" in output
+    assert "DAFTAR NODE (36 node)" in output
+    assert "DAFTAR RUAS JALAN (38 ruas)" in output
     for node_id in graph.nodes:
         assert node_id in output, node_id
     for edge_id in graph.edge_ids:
