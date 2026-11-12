@@ -32,7 +32,7 @@ import yaml
 REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO / "src"))
 
-from pathfinding.dijkstra import dijkstra, reroute_after_closure  # noqa: E402
+from pathfinding.dijkstra import dijkstra  # noqa: E402
 from pathfinding.io import load_scenario  # noqa: E402
 
 OVERPASS = "https://overpass-api.de/api/interpreter"
@@ -143,7 +143,15 @@ def fetch_osm_facilities(nodes: list[dict]) -> dict[str, list[dict]]:
             f'way["amenity"="fire_station"]({wide}););out tags center;'
         )["elements"]
     )
-    return {"hydrants": hydrants, "police": police, "stations": stations}
+    time.sleep(1)
+    hospitals = _points(
+        overpass(
+            f'[out:json][timeout:90];(node["amenity"="hospital"]({bbox});'
+            f'way["amenity"="hospital"]({bbox}););out tags center;'
+        )["elements"]
+    )
+    return {"hydrants": hydrants, "police": police, "stations": stations,
+            "hospitals": hospitals}
 
 
 # ------------------------------------------------------------- payload data --
@@ -157,11 +165,22 @@ def build_payload(scenario_path: Path, with_osm: bool) -> dict:
     closure = str(scenario.get("closure_edge") or "")
 
     initial = dijkstra(graph, start, goal)
-    alternate = (
-        reroute_after_closure(graph, start, goal, {closure}) if closure else None
-    )
     if initial is None:
         raise SystemExit("Rute awal tidak ditemukan; peta tidak bisa dibuat.")
+
+    # Rute alternatif per unit damkar (berbeda satu sama lain), dihitung dalam
+    # kondisi ruas hambatan ditutup - sama seperti keluaran simulasi.
+    from pathfinding.rute_alternatif import plan_alternatives
+
+    search_blocked = {closure} if closure else set()
+    plans = scenario.get("alternatives") or []
+    if not plans and closure:
+        plans = [{"id": "tercepat", "label": "Rute alternatif", "purpose": "", "waypoints": []}]
+    alternatives = plan_alternatives(
+        plans, start, goal, lambda a, b: dijkstra(graph, a, b, search_blocked)
+    )
+    found = [alt for alt in alternatives if alt["result"] is not None]
+    alternate = found[0]["result"] if found else None
 
     # Waktu tempuh dari pos damkar ke tiap node (Dijkstra per node).
     minutes: dict[str, float] = {}
@@ -170,7 +189,15 @@ def build_payload(scenario_path: Path, with_osm: bool) -> dict:
         minutes[node_id] = round(result.cost, 2) if result else float("inf")
 
     initial_edges = set(initial.edges)
-    alternate_edges = set(alternate.edges) if alternate else set()
+    alternative_edges: set[str] = set()
+    alternative_nodes: set[str] = set()
+    service_nodes: set[str] = set()
+    for alt in found:
+        if alt["result"] is None:
+            continue
+        alternative_edges |= set(alt["result"].edges)
+        alternative_nodes |= set(alt["result"].nodes)
+        service_nodes |= set(alt["waypoints"])
 
     nodes = []
     for node_id, label in graph.nodes.items():
@@ -182,8 +209,10 @@ def build_payload(scenario_path: Path, with_osm: bool) -> dict:
             roles.append("tujuan")
         if initial and node_id in initial.nodes:
             roles.append("rute awal")
-        if alternate and node_id in alternate.nodes:
+        if node_id in alternative_nodes:
             roles.append("rute alternatif")
+        if node_id in service_nodes:
+            roles.append("titik layanan")
         nodes.append(
             {
                 "id": node_id,
@@ -221,7 +250,7 @@ def build_payload(scenario_path: Path, with_osm: bool) -> dict:
                     "road": edge.road_name,
                     "route": (
                         "initial" if edge.edge_id in initial_edges
-                        else "alternate" if edge.edge_id in alternate_edges
+                        else "alternate" if edge.edge_id in alternative_edges
                         else None
                     ),
                     "closed": edge.edge_id == closure,
@@ -248,6 +277,19 @@ def build_payload(scenario_path: Path, with_osm: bool) -> dict:
             }
         )
     deploy_routes.sort(key=lambda item: item["cost"])
+
+    alternative_payload = [
+        {
+            "id": alt["id"],
+            "label": alt["label"],
+            "purpose": alt["purpose"],
+            "waypoints": alt["waypoints"],
+            "cost": None if alt["result"] is None else round(alt["result"].cost, 2),
+            "edges": None if alt["result"] is None else len(alt["result"].edges),
+            "nodes": None if alt["result"] is None else alt["result"].nodes,
+        }
+        for alt in alternatives
+    ]
 
     metadata = scenario.get("metadata") or {}
     payload = {
@@ -278,8 +320,9 @@ def build_payload(scenario_path: Path, with_osm: bool) -> dict:
             ),
         },
         "deploy": deploy_routes,
+        "alternatives": alternative_payload,
         "straight_fallback": straight_fallback,
-        "osm": {"hydrants": [], "police": [], "stations": []},
+        "osm": {"hydrants": [], "police": [], "stations": [], "hospitals": []},
         "with_osm": False,
         "fact_note": str(metadata.get("facility_note", "")),
         "source_articles": metadata.get("source_articles") or [],
@@ -353,7 +396,7 @@ TEMPLATE = """<!DOCTYPE html>
     <h2>Lapisan peta</h2>
     <div class="legend-item"><span class="swatch" style="background:#94a3b8"></span> Jaringan jalan yang bisa dilalui damkar</div>
     <div class="legend-item"><span class="swatch" style="background:#1d4ed8"></span> Rute awal (tercepat)</div>
-    <div class="legend-item"><span class="swatch" style="background:#f59e0b"></span> Rute alternatif setelah kerumunan menutup <code>__CLOSED__</code></div>
+    <div id="alt-legend"></div>
     <div class="legend-item"><span class="swatch" style="background:#7c3aed"></span> Rute dari kantor damkar tambahan → pasar (node logistik <b>dilewati</b> damkar)</div>
     <div class="legend-item"><span class="swatch" style="background:#dc2626"></span> Ruas tertutup kerumunan (event berita)</div>
 
@@ -371,16 +414,20 @@ TEMPLATE = """<!DOCTYPE html>
     <div class="legend-item"><span class="dot" style="background:#a855f7"></span> Kantor damkar (logistik: mobil/personel)</div>
     <div class="legend-item"><span class="swatch" style="background:#0ea5e9;height:13px;width:13px;border-radius:50%"></span> Hydrant asli di OSM (klik untuk detail)</div>
     <div class="legend-item"><span class="swatch" style="background:#1e3a8a;height:13px;width:13px;border-radius:50%"></span> Kantor polisi asli di OSM</div>
+    <div class="legend-item"><span class="swatch" style="background:#be123c;height:13px;width:13px;border-radius:50%"></span> Rumah sakit di OSM (bantuan ambulance)</div>
     <div class="legend-item"><span class="swatch" style="background:#b91c1c;height:13px;width:13px;border-radius:50%"></span> Kantor damkar asli di OSM</div>
 
     <div class="note">Semua node dan ruas pada peta ini <b>bisa dilalui mobil damkar</b> menurut model
     (graf tidak berarah), dan seluruh garis mengikuti jalan sungguhan (geometri OSRM).
-    Setiap node kantor damkar yang ditambahkan <b>dilewati oleh rute ungu</b> dari kantor
-    tersebut ke pasar — bukan cabang menggantung. Klik node untuk melihat waktu tempuh
-    dari pos, status hydrant, dan fasilitasnya; klik ruas untuk bobot dan nama jalan.</div>
+    Setiap unit damkar memakai <b>rute alternatif berbeda</b>: ada yang lewat kantor polisi
+    (kawalan polisi) dan ada yang lewat IGD rumah sakit (bantuan ambulance) - ketiganya
+    tercantum di legenda dengan biayanya. Setiap node kantor damkar yang ditambahkan
+    <b>dilewati oleh rute ungu</b> dari kantor tersebut ke pasar. Klik node untuk melihat
+    waktu tempuh dari pos, status hydrant, dan fasilitasnya; klik ruas untuk bobot dan
+    nama jalan.</div>
     <div class="note warn">Hydrant di simpang selain yang bertanda "terverifikasi OSM" adalah
-    <b>asumsi model</b>; kantor polisi, kantor damkar, dan hydrant berwarna biru tua/merah berasal
-    langsung dari OpenStreetMap (ekstraksi __GENERATED__).</div>
+    <b>asumsi model</b>; kantor polisi, kantor damkar, rumah sakit, dan hydrant berwarna biru
+    tua/merah berasal langsung dari OpenStreetMap (ekstraksi __GENERATED__).</div>
     <div class="src">Sumber data: OpenStreetMap contributors (ODbL) · tile dasar:
     Esri World Street Map (jalan) dan Esri World Imagery (citra satelit) ·
     rute: Dijkstra (pembanding A* sama hasilnya).<br>__SOURCES__</div>
@@ -394,6 +441,7 @@ const NODES = __NODES__;
 const EDGES = __EDGES__;
 const ROUTES = __ROUTES__;
 const DEPLOY = __DEPLOY__;
+const ALTS = __ALTS__;
 const OSM = __OSM__;
 const CLOSED_EDGE = "__CLOSED__";
 const UNIT = "__UNIT__";
@@ -487,12 +535,36 @@ const gInitial = L.layerGroup().addLayer(routeLine(ROUTES.initial.nodes,
   {color: "#1d4ed8", weight: 6, opacity: .9},
   routePopup("Rute awal (tercepat)", {cost: ROUTES.initial.cost,
     edges: ROUTES.initial.edges, from: "__START__"})));
-const gAlternate = ROUTES.alternate ? L.layerGroup().addLayer(routeLine(
-  ROUTES.alternate.nodes,
-  {color: "#f59e0b", weight: 6, opacity: .9, dashArray: "12, 9"},
-  routePopup("Rute alternatif setelah " + CLOSED_EDGE + " ditutup",
-    {cost: ROUTES.alternate.cost, edges: ROUTES.alternate.edges,
-     from: "__START__"}))) : L.layerGroup();
+// --- rute alternatif tiap unit damkar (berbeda satu sama lain) -------------
+// Tiap unit mendapat rutenya sendiri; ada yang lewat kantor polisi (kawalan)
+// dan ada yang lewat IGD rumah sakit (bantuan ambulance).
+const ALT_COLORS = ["#f59e0b", "#0d9488", "#db2777"];
+const ALT_DASH = ["12, 9", "", "4, 6"];
+const gAlts = L.layerGroup();
+ALTS.forEach((r, i) => {
+  if (!r.nodes) return;  // rencana gagal: tidak digambar
+  const color = ALT_COLORS[i % ALT_COLORS.length];
+  const popup = `<div class="popup"><b>Alternatif ${i + 1}: ${esc(r.label)}</b><br>
+    ${esc(r.purpose)}<br>
+    ${esc(r.cost)} ${esc(UNIT)} · ${esc(r.edges)} ruas · ${esc(r.nodes.length)} node` +
+    (r.waypoints && r.waypoints.length
+      ? `<br>Titik layanan (dilewati): ${esc(r.waypoints.join(", "))}` : "") + `</div>`;
+  routeLine(r.nodes,
+    {color: color, weight: 6, opacity: .9, dashArray: ALT_DASH[i % ALT_DASH.length]},
+    popup).addTo(gAlts);
+});
+// Isi legenda rute alternatif dari data (label + biaya, bukan teks mati).
+ALTS.forEach((r, i) => {
+  const box = document.getElementById("alt-legend");
+  if (!box || !r.nodes) return;
+  const item = document.createElement("div");
+  item.className = "legend-item";
+  item.innerHTML = `<span class="swatch" style="background:${ALT_COLORS[i % ALT_COLORS.length]}"></span>` +
+    ` Alternatif ${i + 1} - ${esc(r.label)} (${esc(r.cost)} menit)` +
+    (r.waypoints && r.waypoints.length
+      ? ` <span class="muted">lewat ${esc(r.waypoints.join(", "))}</span>` : "");
+  box.appendChild(item);
+});
 
 // --- rute dari kantor damkar tambahan (node logistik dilewati damkar) -------
 const gDeploy = L.layerGroup();
@@ -552,6 +624,9 @@ NODES.forEach(n => {
   if (n.facility) {
     if (n.facility.type === "police_station") {
       facility += `<br>🚔 ${esc(n.facility.name)} (${esc(n.facility.distance_m)} m, ${esc(n.facility.address || "")})`;
+    } else if (n.facility.type === "hospital") {
+      facility += `<br>🏥 ${esc(n.facility.ambulances)} ambulance <span class="muted">(asumsi model)</span>` +
+        (n.facility.emergency ? " · IGD darurat terverifikasi di OSM" : "");
     } else {
       facility += `<br>🚒 Kantor damkar: ${esc(n.facility.trucks)} mobil, `
         + `${esc(n.facility.personnel)} personel <span class="muted">(asumsi model)</span>`;
@@ -587,12 +662,20 @@ OSM.stations.forEach(s => {
       <span class="id">${esc(s.osm)}</span>${s.address ? "<br>" + esc(s.address) : ""}</div>`)
     .addTo(gOsm);
 });
+OSM.hospitals.forEach(h => {
+  L.circleMarker([h.lat, h.lon], {radius: 6, color: "#0f172a", weight: 2,
+      fillColor: "#be123c", fillOpacity: .95})
+    .bindPopup(`<div class="popup"><b>🏥 ${esc(h.name || "Rumah sakit")}</b><br>
+      <span class="id">${esc(h.osm)}</span>${h.address ? "<br>" + esc(h.address) : ""}<br>
+      <span class="muted">potensi bantuan ambulance (rute alternatif)</span></div>`)
+    .addTo(gOsm);
+});
 
 // --- kontrol lapisan & tampilan awal ---------------------------------------
 const overlays = {
   "Jaringan (bisa dilalui damkar)": gNetwork,
   "Rute awal": gInitial,
-  "Rute alternatif": gAlternate,
+  "Rute alternatif (3 unit damkar)": gAlts,
   "Rute dari kantor damkar": gDeploy,
   "Ruas tertutup": gClosed,
   "Node & waktu tempuh": gNodes,
@@ -600,8 +683,8 @@ const overlays = {
 };
 L.control.layers({"Peta jalan": streetTiles, "Citra satelit": satellite}, overlays,
   {collapsed: false}).addTo(map);
-[gNetwork, gInitial, gAlternate, gDeploy, gClosed, gNodes].forEach(l => l.addTo(map));
-if (OSM.hydrants.length || OSM.police.length || OSM.stations.length) gOsm.addTo(map);
+[gNetwork, gInitial, gAlts, gDeploy, gClosed, gNodes].forEach(l => l.addTo(map));
+if (OSM.hydrants.length || OSM.police.length || OSM.stations.length || OSM.hospitals.length) gOsm.addTo(map);
 
 const bounds = L.latLngBounds(NODES.map(n => [n.lat, n.lon]));
 map.fitBounds(bounds.pad(0.08));
@@ -635,6 +718,7 @@ def render(payload: dict) -> str:
         .replace("__EDGES__", json.dumps(payload["edges"], ensure_ascii=False))
         .replace("__ROUTES__", json.dumps(payload["routes"], ensure_ascii=False))
         .replace("__DEPLOY__", json.dumps(payload["deploy"], ensure_ascii=False))
+        .replace("__ALTS__", json.dumps(payload["alternatives"], ensure_ascii=False))
         .replace("__OSM__", json.dumps(payload["osm"], ensure_ascii=False))
         .replace("__UNIT__", html.escape(payload["unit"]))
         .replace("__START__", payload["start"])
@@ -675,7 +759,7 @@ def main() -> int:
     if payload["with_osm"]:
         print(
             f"OSM: hydrant={len(osm['hydrants'])} kantor polisi={len(osm['police'])} "
-            f"kantor damkar={len(osm['stations'])}"
+            f"kantor damkar={len(osm['stations'])} rumah sakit={len(osm['hospitals'])}"
         )
         print(
             f"geometri jalan: {len(payload['edges']) - payload['straight_fallback']}"
