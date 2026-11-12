@@ -14,6 +14,100 @@ import yaml
 from .graph import Graph
 
 _MAP_FIELDS = {"lat", "lon", "osm_node"}
+_FACILITY_TYPES = {"fire_station", "police_station"}
+
+
+def _validate_facilities(items: list[Any], metadata: dict[str, Any]) -> None:
+    """Validasi fasilitas node: hydrant, kantor polisi, dan kantor damkar.
+
+    Aturan model proyek: bila metadata menandai ``facilities: true``, SETIAP
+    node wajib memiliki hydrant kecuali node kantor polisi - dan node kantor
+    polisi justru dilarang memiliki hydrant. Data terverifikasi peta wajib
+    menyebut ``osm_node``/``osm_way``; data asumsi model wajib menyebut
+    ``source`` supaya tidak terbaca sebagai fakta peta.
+    """
+    if "facilities" in metadata and not isinstance(metadata["facilities"], bool):
+        raise ValueError("Field metadata 'facilities' harus boolean.")
+    enforce = bool(metadata.get("facilities", False))
+
+    for item in items:
+        if not isinstance(item, dict) or "id" not in item:
+            continue  # struktur dasar sudah divalidasi _load_nodes
+        node_id = str(item["id"]).strip()
+        facility = item.get("facility")
+        hydrant = item.get("hydrant")
+        if facility is not None:
+            _validate_facility(facility, node_id)
+        if hydrant is not None:
+            _validate_hydrant(hydrant, node_id)
+        if not enforce:
+            continue
+        is_police = isinstance(facility, dict) and facility.get("type") == "police_station"
+        if is_police and hydrant is not None:
+            raise ValueError(
+                f"Node {node_id!r} bertipe kantor polisi dan tidak boleh memiliki hydrant."
+            )
+        if not is_police and hydrant is None:
+            raise ValueError(
+                f"Node {node_id!r} wajib memiliki hydrant (aturan model: hydrant di "
+                "setiap node kecuali node kantor polisi)."
+            )
+
+
+def _validate_hydrant(value: Any, node_id: str) -> None:
+    if not isinstance(value, dict):
+        raise ValueError(f"Field 'hydrant' node {node_id!r} harus object/dictionary.")
+    if not isinstance(value.get("verified"), bool):
+        raise ValueError(f"Field 'hydrant.verified' node {node_id!r} harus boolean.")
+    distance = value.get("distance_m")
+    if isinstance(distance, bool) or not isinstance(distance, (int, float)) or float(distance) < 0:
+        raise ValueError(
+            f"Field 'hydrant.distance_m' node {node_id!r} harus angka >= 0, diterima: {distance!r}."
+        )
+    nearest = value.get("nearest_osm_m")
+    if nearest is not None and (
+        isinstance(nearest, bool) or not isinstance(nearest, (int, float)) or nearest < 0
+    ):
+        raise ValueError(
+            f"Field 'hydrant.nearest_osm_m' node {node_id!r} harus angka >= 0, diterima: {nearest!r}."
+        )
+    if value["verified"]:
+        if "osm_node" not in value:
+            raise ValueError(
+                f"Hydrant terverifikasi pada node {node_id!r} wajib menyebut 'osm_node'."
+            )
+    else:
+        source = value.get("source")
+        if not isinstance(source, str) or not source.strip():
+            raise ValueError(
+                f"Hydrant asumsi model pada node {node_id!r} wajib menyebut 'source' "
+                "agar tidak terbaca sebagai fakta peta."
+            )
+
+
+def _validate_facility(value: Any, node_id: str) -> None:
+    if not isinstance(value, dict):
+        raise ValueError(f"Field 'facility' node {node_id!r} harus object/dictionary.")
+    kind = value.get("type")
+    if kind not in _FACILITY_TYPES:
+        raise ValueError(
+            f"Field 'facility.type' node {node_id!r} harus salah satu "
+            f"{sorted(_FACILITY_TYPES)}, diterima: {kind!r}."
+        )
+    if not isinstance(value.get("verified"), bool):
+        raise ValueError(f"Field 'facility.verified' node {node_id!r} harus boolean.")
+    if kind == "fire_station":
+        for field_name in ("trucks", "personnel"):
+            count = value.get(field_name)
+            if isinstance(count, bool) or not isinstance(count, int) or count < 0:
+                raise ValueError(
+                    f"Kantor damkar pada node {node_id!r} wajib memuat '{field_name}' "
+                    f"berupa bilangan bulat >= 0, diterima: {count!r}."
+                )
+    else:
+        name = value.get("name")
+        if not isinstance(name, str) or not name.strip():
+            raise ValueError(f"Kantor polisi pada node {node_id!r} wajib memuat 'name'.")
 
 
 def load_scenario(path: str | Path) -> tuple[Graph, dict[str, Any]]:
@@ -37,6 +131,7 @@ def load_scenario(path: str | Path) -> tuple[Graph, dict[str, Any]]:
 
     graph = Graph()
     _load_nodes(data["nodes"], graph)
+    _validate_facilities(data["nodes"], data.get("metadata") or {})
     access_status = _load_edges(data["edges"], graph, reference_schema="execution_plan" in data)
     scenario = _load_scenario_block(data, graph)
     scenario["access_status"] = access_status
@@ -146,7 +241,7 @@ def _load_scenario_block(data: dict[str, Any], graph: Graph) -> dict[str, Any]:
     if isinstance(raw, dict):
         scenario = dict(raw)
         scenario.setdefault("events", [])
-        scenario.setdefault("metadata", data.get("metadata", {}))
+        scenario.setdefault("metadata", data.get("metadata") or {})
         scenario.setdefault("blocked_edges", [])
     else:
         plan = data.get("execution_plan")
