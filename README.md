@@ -93,9 +93,10 @@ untuk ruas yang menjadi objek penutupan).
 
 ## 6. Daftar node dan alasan pemilihannya
 
-Skenario default `data/pasar_johar_damkar.yaml` — 34 node (31 simpang jalan
-asli + 3 kantor pemadam tambahan sebagai node logistik; fasilitas node ada di
-bagian 20). "Peran" di bawah
+Skenario default `data/pasar_johar_damkar.yaml` — 36 node (31 simpang jalan
+asli + 3 kantor pemadam tambahan sebagai node logistik + 1 rumah sakit +
+1 kantor polisi kedua; fasilitas node ada di bagian 20, rute alternatifnya di
+bagian 22). "Peran" di bawah
 dihitung dari hasil Dijkstra pada skenario ini (rute awal dan rute alternatif).
 
 | # | id | label | peran | osm_node |
@@ -134,6 +135,8 @@ dihitung dari hasil Dijkstra pada skenario ini (rute awal dan rute alternatif).
 | 32 | pos_damkar_tambahan_barat | Pos Pemadam Kebakaran (OSM tanpa nama, way 1338307869) | node logistik; 2 mobil, 8 personel (asumsi model) | way 1338307869 |
 | 33 | pos_damkar_tambahan_utara | Pos Pemadam Kebakaran (OSM tanpa nama, way 740895779) | node logistik; 2 mobil, 8 personel (asumsi model) | way 740895779 |
 | 34 | pos_damkar_tambahan_walisongo | Kantor Pemadam Kebakaran (Jl. Walisongo) | node logistik; 3 mobil, 10 personel (asumsi model) | way 564500892 |
+| 35 | rumah_sakit_kariadi | Rumah Sakit Umum Pusat Dr. Kariadi (IGD 24 jam) | **titik layanan** rute alternatif2 (bantuan ambulance); 3 ambulance (asumsi model) | way 155565070 |
+| 36 | polisi_polda_jateng | BIDHUMAS Polda Jawa Tengah | **titik layanan** rute alternatif3 (kawalan polisi); tanpa hydrant | way 339001900 |
 
 Alasan pemilihan: 31 simpang pertama adalah persimpangan nyata pada jalur yang
 menghubungkan pos pemadam ke pasar (diverifikasi ada di OpenStreetMap dengan
@@ -147,7 +150,7 @@ awal dan dapat mencapai tujuan.
 
 ## 7. Daftar edge/ruas yang dimodelkan
 
-36 ruas (33 ruas jalan + 3 koneksi kantor damkar, bagian 20). `w` = bobot (menit estimasi), `m` = panjang ruas menurut peta (meter).
+38 ruas (33 ruas jalan + 5 koneksi fasilitas, bagian 20). `w` = bobot (menit estimasi), `m` = panjang ruas menurut peta (meter).
 
 | id | dari → ke | w | m | nama ruas |
 |---|---|---|---|---|
@@ -187,9 +190,12 @@ awal dan dapat mencapai tujuan.
 | e_log01 | pos_damkar_tambahan_barat → simpang_madukoro_cokrokembang | 11,57 | 3856 | koneksi model (nama jalan belum terverifikasi) |
 | e_log02 | pos_damkar_tambahan_utara → pos_damkar_madukoro | 18,25 | 6084 | koneksi model (nama jalan belum terverifikasi) |
 | e_log03 | pos_damkar_tambahan_walisongo → simpang_cokrokembang_sudirman | 14,32 | 4775 | Jl. Walisongo (koneksi model) |
+| e_log04 | rumah_sakit_kariadi → simpang_sutomo_pandanaran | 3,69 | 1230 | Jl. Dr. Sutomo (koneksi model) |
+| e_log05 | polisi_polda_jateng → simpang_panjaitan_haryono | 2,11 | 705 | koneksi model (nama jalan belum terverifikasi) |
 
-Tiga edge `e_log*` adalah **koneksi model** kantor damkar ke node jaringan
-terdekat: `m` diambil dari jarak rute mengemudi (OSRM, bukan jarak lurus),
+Lima edge `e_log*` adalah **koneksi model** fasilitas (kantor damkar, rumah
+sakit, kantor polisi) ke node jaringan terdekat: `m` diambil dari jarak rute
+mengemudi (OSRM, bukan jarak lurus),
 bobotnya `m × 60 / (20 × 1000)` memakai kecepatan model permukiman, dan
 keduanya dicatat apa adanya karena nama ruas penghubung belum terverifikasi.
 Edge ini bertanda `connection: model` di YAML, tidak ikut pencocokan nama
@@ -281,7 +287,7 @@ python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install -r requirements-dev.txt
 python -m pip install -e .
-python -m pathfinding.simulation                                  # skenario default: 34 node (31 simpang + 3 kantor damkar)
+python -m pathfinding.simulation                                  # skenario default: 36 node (31 simpang + 5 node fasilitas)
 python -m pathfinding.simulation --algorithm astar                # rute sama, diprose A* (bandingkan node dieksplorasi)
 python -m pathfinding.simulation --scenario data/pasar_johar_demo.yaml   # skenario demo lama (10 node)
 python -m pytest -v
@@ -321,27 +327,30 @@ python tools/eksperimen_arah.py                              # uji penerapan atu
 python -m pytest -v
 ```
 
-Cakupan 69 pengujian: perhitungan Dijkstra pada graf kecil, penutupan ruas,
+Cakupan 82 pengujian: perhitungan Dijkstra pada graf kecil, penutupan ruas,
 skenario tanpa rute, pembacaan YAML (termasuk skema referensi `execution_plan`),
 validasi struktur (ID duplikat, bobot negatif/non-angka, node/ruas tak
 dikenal, field peta separuh, tipe `directed`/`access_status`), konsistensi
 jumlah bobot rute terhadap total, keluaran simulasi (daftar node, daftar ruas,
 sumber berita, batas fakta), skenario tanpa rute alternatif, benchmark, serta
 pengujian A* (`tests/test_astar.py`): kesetaraan biaya/urutan rute dengan
-Dijkstra pada kedua skenario, admissibility heuristik untuk seluruh 34 node,
+Dijkstra pada kedua skenario, admissibility heuristik untuk seluruh 36 node,
 kontrak input yang sama, dan tabel perbandingan benchmark. Ditambah
 `tests/test_facilities.py` (17 pengujian): aturan hydrant/kantor polisi,
 validasi field fasilitas, inventaris skenario damkar, dan keluaran bagian
-sumber air. Seluruh pengujian yang sudah ada sebelum pengembangan tetap
-lulus.
+sumber air; serta `tests/test_alternatif.py` (13 pengujian): penggabungan kaki
+rute, rute gagal, kesetaraan Dijkstra vs A*, ketiga alternatif unik dengan
+waypoint terpenuhi, cakupan 36/36 node, dan validasi blok `alternatives`.
+Seluruh pengujian yang sudah ada sebelum pengembangan tetap lulus.
 
 ## 14. Contoh output program
 
-Output `python -m pathfinding.simulation` (≈444 baris) berurutan: header kasus,
+Output `python -m pathfinding.simulation` (≈702 baris) berurutan: header kasus,
 `01 KONFIGURASI SIMULASI`, `02 SUMBER BERITA DAN BATAS DATA`,
-`03 DAFTAR NODE (34 node)`, `04 DAFTAR RUAS JALAN (36 ruas)`,
+`03 DAFTAR NODE (36 node)`, `04 DAFTAR RUAS JALAN (38 ruas)`,
 `04B SUMBER AIR DAN FASILITAS`,
-`05 RUTE AWAL`, `06 EVENT: AKSES JALAN TERHAMBAT`, `07 RUTE ALTERNATIF`,
+`05 RUTE AWAL`, `06 EVENT: AKSES JALAN TERHAMBAT`,
+`07 RUTE ALTERNATIF (3 unit)` dengan sub-bagian `07.1`–`07.3`,
 `08 RINGKASAN HASIL`, `09 CATATAN VALIDITAS DATA`. Ringkasannya:
 
 ```text
@@ -353,7 +362,7 @@ Output `python -m pathfinding.simulation` (≈444 baris) berurutan: header kasus
 ║ Lokasi  : Relokasi Pasar Johar, kawasan Masjid Agung Jawa Tengah (MAJT),   ║
 ║ Semarang                                                                   ║
 ║ Tanggal : 2 Februari 2022                                                  ║
-║ Graf    : 34 node | 36 ruas                                                ║
+║ Graf    : 36 node | 38 ruas                                                ║
 ╚════════════════════════════════════════════════════════════════════════════╝
 
 01  KONFIGURASI SIMULASI
@@ -367,7 +376,7 @@ Output `python -m pathfinding.simulation` (≈444 baris) berurutan: header kasus
   Satuan bobot            : menit estimasi
   Ruas tertutup sejak awal: Tidak ada
 
-03  DAFTAR NODE (34 node)
+03  DAFTAR NODE (36 node)
   01. pos_damkar_madukoro · titik awal, dilalui rute awal, dilalui rute
        Dinas Pemadam Kebakaran Kota Semarang (Jl. Madukoro III)
   ...
@@ -376,11 +385,14 @@ Output `python -m pathfinding.simulation` (≈444 baris) berurutan: header kasus
   Aturan model            : hydrant di setiap node kecuali node kantor polisi
   Hydrant terverifikasi OSM: 1 node - Hydrant BCA (251 m dari
                              simpang_depok_wahidhasyim)
-  Hydrant asumsi model    : 32 node (jejak jarak ke hydrant OSM tercatat di
+  Hydrant asumsi model    : 33 node (jejak jarak ke hydrant OSM tercatat di
                             YAML per node)
   Kantor polisi (tanpa hydrant): simpang_cipto_bugangan
     Polsek Semarang Timur (32 m dari node) - tidak memiliki hydrant sesuai
     aturan model
+  Kantor polisi (tanpa hydrant): polisi_polda_jateng
+    BIDHUMAS Polda Jawa Tengah (0 m dari node) - tidak memiliki hydrant
+    sesuai aturan model
   Kantor damkar logistik (armada/personel = asumsi model):
     pos_damkar_tambahan_barat - 2 mobil, 8 personel
     pos_damkar_tambahan_utara - 2 mobil, 8 personel
@@ -410,15 +422,43 @@ Output `python -m pathfinding.simulation` (≈444 baris) berurutan: header kasus
                             berita 2 Februari 2022)
   Tindakan   : Ruas dikecualikan dari pencarian rute berikutnya.
 
+07  RUTE ALTERNATIF (3 dari 3 unit damkar)
+  Tiap unit damkar memakai rute BERBEDA; daftar berurutan dari yang
+  tercepat. Rute bertanda titik layanan melewati rumah sakit/kantor polisi.
+
+07.1  Koridor selatan - kawalan polisi
+  Rute tercepat setelah e14 ditutup; melewati Polsek Semarang Timur
+  (simpang_cipto_bugangan) sehingga menjadi perumpaan kawalan polisi menuju
+  pasar.
+  Biaya total: 11.93 menit estimasi |17 ruas |18 node
+  ... daftar node ...
+
+07.2  Via IGD rumah sakit - bantuan ambulance
+  Titik layanan (dilewati rute ini): rumah_sakit_kariadi
+  Biaya total:20.46 menit estimasi |19 ruas |20 node
+  ...
+
+07.3  Kawalan Polda + akses Tirtoyoso XI
+  Titik layanan (dilewati rute ini): polisi_polda_jateng, simpang_tirtoyoso_xi
+  Biaya total:18.29 menit estimasi |21 ruas |22 node
+  ...
+
 08  RINGKASAN HASIL
-  Rute awal               : 10.74 menit estimasi | 14 ruas
-  Rute alternatif         : 11.93 menit estimasi | 17 ruas
-  Perubahan bobot total   : +1.19 menit estimasi
-  Selisih ruas            : +3 ruas
+  Rute awal               :10.74 menit estimasi |14 ruas
+  Alternatif selatan_kawalan_polisi:11.93 menit estimasi |17 ruas
+  Alternatif bantuan_ambulance:20.46 menit estimasi |19 ruas | lewat
+                                rumah_sakit_kariadi
+  Alternatif kawalan_polda_akses_tirtoyoso:18.29 menit estimasi |21 ruas |
+                                            lewat polisi_polda_jateng,
+                                            simpang_tirtoyoso_xi
+  Perubahan bobot (rute alternatif tercepat):+1.19 menit estimasi
+  Selisih ruas            :+3 ruas
+  Node unik dikunjungi    :36/36 node (rute awal +3 alternatif +3 rute
+                            kantor damkar)
   Status                  : Rute alternatif berhasil ditemukan
 
 09  CATATAN VALIDITAS DATA
-  ... Terverifikasi: 34/34 elemen OSM (31 simpang + 3 way kantor damkar),
+  ... Terverifikasi: 36/36 elemen OSM (31 simpang + 5 way fasilitas),
   28/28 nama ruas, graf satu komponen ...
   Belum diverifikasi: aturan satu arah 2022, posisi persimpangan pada peta
   resmi, waktu tempuh aktual, simpang pemutar ...
@@ -455,7 +495,7 @@ Peta jalan: OpenStreetMap contributors (ODbL).
 ```text
 MatdisLanjutTubes/
 ├── data/
-│   ├── pasar_johar_damkar.yaml    # SKENARIO DEFAULT: 34 node (31 simpang OSM + 3 kantor damkar)
+│   ├── pasar_johar_damkar.yaml    # SKENARIO DEFAULT: 36 node (31 simpang OSM + 5 node fasilitas)
 │   └── pasar_johar_demo.yaml      # skenario lama berbasis screenshot (10 node)
 ├── docs/
 │   ├── analisis_studi_kasus.md    # analisis berita, batas fakta, rancangan node/edge, keputusan arah
@@ -463,6 +503,7 @@ MatdisLanjutTubes/
 ├── src/pathfinding/
 │   ├── graph.py                   # adjacency list berbobot + validasi ID/bobot/arah
 │   ├── dijkstra.py                # Dijkstra baseline, rute ber-jejak ruas, reroute setelah penutupan
+│   ├── rute_alternatif.py         # rute per unit damkar (waypoint: rumah sakit/kantor polisi)
 │   ├── astar.py                   # A* pembanding: f = g + h, kontrak identik dengan Dijkstra
 │   ├── heuristic.py               # heuristik haversine admissible (jarak lurus / kecepatan terbesar)
 │   ├── io.py                      # YAML loader + validasi struktur & referensi skenario
@@ -470,7 +511,8 @@ MatdisLanjutTubes/
 │   └── benchmark.py               # pengukuran waktu + perbandingan Dijkstra vs A*
 ├── tests/test_dijkstra.py         # 38 pengujian baseline
 ├── tests/test_astar.py            # 14 pengujian A* & heuristik
-├── tests/test_facilities.py       # 17 pengujian fasilitas node (total 69)
+├── tests/test_facilities.py       # 17 pengujian fasilitas node
+├── tests/test_alternatif.py       # 13 pengujian rute alternatif (total 82)
 ├── tools/
 │   ├── validasi_peta.py           # validasi node/nama ruas/aturan arah terhadap OSM
 │   ├── validasi_fasilitas.py      # cocokkan hydrant, kantor polisi, kantor damkar ke OSM
@@ -511,18 +553,18 @@ python -m pathfinding.simulation --algorithm astar     # lihat "Node dieksploras
 python -m pathfinding.benchmark --compare --repeats 10000
 ```
 
-Hasil `--compare --repeats 50000` pada skenario default (34 node / 36 ruas,
+Hasil `--compare --repeats 50000` pada skenario default (36 node / 38 ruas,
 Linux, Python 3.14, diulang tiga kali agar arah hasil stabil):
 
 | algoritma | rata-rata | minimum | biaya rute | node rute | node dieksplorasi |
 |---|---|---|---|---|---|
-| Dijkstra | 0,016–0,017 ms | 0,014 ms | 10,74 menit | 15 | 30 |
-| A\* | 0,034–0,036 ms | 0,028 ms | 10,74 menit | 15 | 27 |
+| Dijkstra | 0,018 ms | 0,014 ms | 10,74 menit | 15 | 32 |
+| A\* | 0,037–0,039 ms | 0,029 ms | 10,74 menit | 15 | 27 |
 
-Rasio kecepatan Dijkstra/A\* ≈ **0,47–0,48×** — pada mesin ini A\* **lebih
+Rasio kecepatan Dijkstra/A\* ≈ **0,46–0,48×** — pada mesin ini A\* **lebih
 lambat** sekitar dua kali lipat walaupun memuat lebih sedikit node (hemat
-eksplorasi 3/30 = 10%). Setelah ruas `e14` ditutup, keduanya mengeksplorasi
-29 node sehingga selisihnya nol.
+eksplorasi 5/32 ≈ 16%). Setelah ruas `e14` ditutup, Dijkstra mengeksplorasi
+32 node dan A\* 30 node.
 
 Interpretasi (jujur, sesuai data):
 
@@ -531,7 +573,7 @@ Interpretasi (jujur, sesuai data):
   (ribuan node) penghematan semacam ini biasanya yang membuat A\* menang.
 - **Yang dimenangkan Dijkstra: waktu pada graf kecil.** Biaya heuristik
   (haversine + cache dictionary + kunci antrian 3 elemen) lebih besar daripada
-  penghematan 3 pop pada graf 34 node. Karena itu pada proyek ini Dijkstra
+  penghematan 5 pop pada graf 36 node. Karena itu pada proyek ini Dijkstra
   tetap baseline yang wajar.
 - Angka waktu sangat bergantung mesin/versi Python dan hanya berlaku untuk
   skenario ini; angka rute (10,74 / 11,93 menit) tidak bergantung algoritma.
@@ -557,7 +599,9 @@ ekstraksi **2026-11-12**).
 | Kantor damkar (`amenity=fire_station`) radius 5 km dari jaringan | **3** selain kantor di titik awal |
 | Node yang berada di hydrant sungguhan (≤300 m) | **1** node: `simpang_depok_wahidhasyim` → Hydrant BCA, 251 m (node OSM 5466104936, operator PAM) |
 | Node yang berada di kantor polisi (≤100 m) | **1** node: `simpang_cipto_bugangan` → Polsek Semarang Timur, Jl. Dr. Cipto no 66, 32 m (way 564915121) |
-| Node lain (29 simpang + 3 kantor damkar) | hydrant **asumsi model**, dengan jejak `nearest_osm_m` (jarak ke hydrant OSM terdekat, 335–2076 m) dicatat per node |
+| Kantor polisi kedua (node menempel di gedung kantor) | `polisi_polda_jateng` → BIDHUMAS Polda Jawa Tengah, Jl. Dr. Cipto No 107 (way 339001900), **tanpa hydrant** |
+| Rumah sakit IGD (titik layanan ambulance) | `rumah_sakit_kariadi` → RSUP Dr. Kariadi, Jl. Dr. Sutomo No 16 (way 155565070, `emergency=yes`, IGD 24 jam), sambungan 1230 m ke jaringan |
+| Node lain (29 simpang + 3 kantor damkar + 1 rumah sakit) | hydrant **asumsi model**, dengan jejak `nearest_osm_m` (jarak ke hydrant OSM terdekat, 335–2076 m) dicatat per node |
 
 ### 20.2 Aturan model
 
@@ -581,6 +625,13 @@ ekstraksi **2026-11-12**).
 4. Koneksi kantor damkar ke jaringan memakai jarak rute OSRM (3856/6084/4775 m)
    dan kecepatan model permukiman; nama ruas penghubung belum terverifikasi,
    karena itu edge ditandai `connection: model`.
+5. **Rumah sakit = titik layanan ambulance.** `rumah_sakit_kariadi` menempel
+   pada IGD RSUP Dr. Kariadi (`emergency=yes`, IGD 24 jam terverifikasi di
+   OSM); jumlah **3 ambulance adalah asumsi model**. Node ini menjadi waypoint
+   rute alternatif "bantuan ambulance" sehingga benar-benar dilewati damkar.
+6. **Kantor polisi kedua.** `polisi_polda_jateng` (BIDHUMAS Polda Jateng)
+   juga tanpa hydrant dan menjadi waypoint rute "kawalan polisi" kedua.
+7. **Tiap unit damkar memakai rute berbeda** — rinciannya di bagian22.
 
 Contoh penulisan pada `data/pasar_johar_damkar.yaml`:
 
@@ -613,15 +664,15 @@ Contoh penulisan pada `data/pasar_johar_damkar.yaml`:
     (terverifikasi) dan **`simpang_cipto_bugangan`** yang justru tanpa hydrant
     karena berada di Polsek Semarang Timur.
 - `python -m pytest` mencakup 17 pengujian fasilitas (aturan, validasi field,
-  inventaris, keluaran); total 69 pengujian.
+  inventaris, keluaran); total 82 pengujian.
 
 ### 20.4 Batas fakta dan sisa verifikasi
 
 | Sumber | Isi |
 |---|---|
-| **Fakta peta (OSM, 2026-11-12)** | keberadaan 15 hydrant, 15 kantor polisi, 3 kantor damkar tambahan, koordinat dan nama masing-masing |
-| **Asumsi model** | hydrant di 29 simpang lain, ambang jarak layanan ≤300 m/≤100 m, jumlah mobil dan personel tiap kantor, jarak rute koneksi OSRM |
-| **Belum diverifikasi** | keberadaan hidran fisik di simpang (perlu cek Google Maps/observasi lapangan), aturan hidran yang berlaku pada 2 Februari 2022, jumlah armada/personel sesungguhnya |
+| **Fakta peta (OSM, 2026-11-12)** | keberadaan 15 hydrant, 15 kantor polisi, 3 kantor damkar tambahan, 1 rumah sakit IGD (emergency=yes), koordinat dan nama masing-masing |
+| **Asumsi model** | hydrant di 29 simpang lain, ambang jarak layanan ≤300 m/≤100 m, jumlah mobil/personel/ambulance, jarak rute koneksi OSRM |
+| **Belum diverifikasi** | keberadaan hidran fisik di simpang (perlu cek Google Maps/observasi lapangan), aturan hidran yang berlaku pada 2 Februari 2022, jumlah armada/personel/ambulance sesungguhnya |
 
 Periksa ulang kapan saja dengan
 `python tools/validasi_fasilitas.py data/pasar_johar_damkar.yaml --emit`
@@ -649,19 +700,19 @@ Isi peta (semua dihitung ulang dari YAML, jadi tidak pernah beda dengan
 keluaran simulasi):
 
 Semua garis — jaringan abu-abu maupun rute — **mengikuti jalan sungguhan**:
-geometri tiap ruas diambil dari rute mengemudi OSRM saat generate (36/36 ruas
+geometri tiap ruas diambil dari rute mengemudi OSRM saat generate (38/38 ruas
 pada generate terakhir), bukan garis lurus antar node; mode `--tanpa-osm`
 kembali memakai garis lurus.
 
 | Lapisan | Isi |
 |---|---|
-| Jaringan (bisa dilalui damkar) | 36 ruas + 34 node graf model, klik untuk bobot/nama jalan |
+| Jaringan (bisa dilalui damkar) | 38 ruas + 36 node graf model, klik untuk bobot/nama jalan |
 | Rute awal | pola biru tebal, 10,74 menit / 14 ruas |
-| Rute alternatif | oranye putus-putus, 11,93 menit / 17 ruas (koridor selatan) |
+| Rute alternatif (3 unit damkar) | tiga rute **berbeda**: oranye 11,93 menit (kawalan polisi), teal 20,46 menit (via IGD rumah sakit), merah muda 18,29 menit (kawalan Polda + akses Tirtoyoso XI) — detail di bagian 22 |
 | Rute dari kantor damkar | ungu, satu rute per kantor tambahan → pasar: **22,09 / 24,11 / 28,99 menit** — ketiga node logistik yang ditambahkan **dilewati** rute ini |
 | Ruas tertutup | merah putus-putus pada `e14` (Jl. Barito) — hambatan kerumunan |
 | Node & waktu tempuh | warna node = lama dari pos damkar (≤3 hijau, 3–6 kuning, 6–9 oranye, >9 merah) — jawaban "ke mana saja damkar bisa pergi dan berapa lamanya" |
-| Fasilitas OSM | 22 hydrant, 18 kantor polisi, 4 kantor damkar asli dari OpenStreetMap |
+| Fasilitas OSM | 27 hydrant, 20 kantor polisi, 5 kantor damkar, 23 rumah sakit asli dari OpenStreetMap |
 
 Klik sebuah node untuk melihat perannya (rute awal/alternatif/tujuan), waktu
 tempuh dari pos, status hydrant (terverifikasi OSM atau asumsi model), dan
@@ -670,3 +721,44 @@ armada/personel kantor damkar. Basis peta bisa diganti ke **citra satelit**
 
 Peta digenerate ulang setiap kali data berubah; file HTML ikut di-commit agar
 bisa langsung dibuka tanpa menjalankan ulang tool.
+
+## 22. Rute alternatif multi-unit: tiap damkar rute berbeda
+
+Masalahnya: kalau hanya ada satu rute alternatif, semua unit damkar
+berbondong-bondong di jalur yang sama padahal kebutuhan mereka berbeda — ada
+yang perlu **kawalan polisi**, ada yang perlu **bantuan ambulance** dari
+rumah sakit. Karena itu skenario memuat blok `alternatives` (id, label,
+`purpose`, `waypoints`) dan tiap rencana dihitung menjadi rute konkret oleh
+`src/pathfinding/rute_alternatif.py`:
+
+- `route_via(points, leg_search)` — gabungkan kaki-kaki Dijkstra (atau A*)
+  antar titik layanan menjadi satu rute ber-jejak; bila satu kaki gagal,
+  seluruh rute dilaporkan tidak terjangkau (tidak pernah setengah jadi).
+- `plan_alternatives(plans, start, goal, leg_search)` — ubah daftar rencana
+  menjadi daftar rute siap pakai, mempertahankan rencana gagal agar laporan
+  jujur.
+
+Hasil pada skenario default (kondisi `e14` tertutup), ketiganya dihitung
+dengan Dijkstra — A\* menghasilkan biaya dan urutan node yang sama (diuji):
+
+| # | id rute | tujuan | titik layanan (dilewati) | biaya | ruas | node |
+|---|---|---|---|---|---|---|
+| 1 | `selatan_kawalan_polisi` | koridor selatan tercepat; lewat Polsek Semarang Timur sebagai **kawalan polisi** | `simpang_cipto_bugangan` (otomatis di rute) | **11,93** menit | 17 | 18 |
+| 2 | `bantuan_ambulance` | mampir ke **IGD RSUP Dr. Kariadi** (emergency=yes, 24 jam) untuk koordinasi ambulance, lanjut lewat Jl. Mayjend D.I. Panjaitan – M.T. Haryono | `rumah_sakit_kariadi` | **20,46** menit | 19 | 20 |
+| 3 | `kawalan_polda_akses_tirtoyoso` | mampir ke **BIDHUMAS Polda Jateng** untuk kawalan, masuk pasar lewat Jl. Tirtoyoso XI (e16–e15–e18) | `polisi_polda_jateng`, `simpang_tirtoyoso_xi` | **18,29** menit | 21 | 22 |
+
+Yang dijamin dan diuji (`tests/test_alternatif.py`,13 pengujian):
+
+- **Urutan node ketiga rute berbeda** — tidak ada dua unit memakai rute sama.
+- Semua alternatif **menghindari `e14`**, berangkat dari pos dan berakhir di
+  pasar; waypoint-nya benar-benar terlewati.
+- **Cakupan36/36 node**: gabungan rute awal +3 alternatif +3 rute dari kantor
+  damkar menyentuh seluruh node jaringan — angka ini dicetak simulasi sebagai
+  `Node unik dikunjungi`, jadi tidak ada node yang menganggur.
+- Biaya alternatif lebih besar dari rute awal karena titik layanan
+  mengharuskan mampir; itu konsekuensi jujur dari kebutuhan kawalan/ambulance,
+  bukan galat perhitungan.
+
+Cara menjalankan: `python -m pathfinding.simulation` (atau `--algorithm astar`)
+— bagian `07 RUTE ALTERNATIF (3 unit)` menampilkan tiap rute lengkap dengan
+`purpose` dan biayanya; di peta, ketiganya jadi lapisan terpisah (bagian21).

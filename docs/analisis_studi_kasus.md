@@ -208,5 +208,13 @@ ringkasannya:
   kantor dilewati oleh rutenya sendiri ke pasar (22,09 / 24,11 / 28,99 menit,
   layer ungu pada peta README bagian 21), jadi seluruh node tambahan benar-
   benar dilalui damkar.
-- Jumlah node/edge skenario menjadi 34/36; rute awal dan alternatif tidak
-  berubah (10,74 dan 11,93 menit).
+- Jumlah node/edge skenario menjadi 36/38; rute awal tetap 10,74 menit dan
+  rute alternatif tercepat tetap 11,93 menit (lihat pengembangan lanjutan
+  di bawah).
+- Pengembangan lanjutan: skenario bertambah node rumah sakit (RSUP Dr. Kariadi,
+  emergency=yes) dan kantor polisi kedua (BIDHUMAS Polda Jateng), lalu blok
+  `alternatives` menghasilkan **tiga rute berbeda untuk tiga unit damkar**:
+  koridor selatan kawalan polisi (11,93), via IGD rumah sakit untuk bantuan
+  ambulance (20,46), dan kawalan Polda dengan akses Tirtoyoso XI (18,29).
+  Gabungan seluruh rute menjangkau36/36 node (README bagian22); graf kini
+ 36 node /38 edge.
