@@ -42,6 +42,7 @@ def run_simulation(scenario_path: str | Path = DEFAULT_SCENARIO,
     unit_label = metadata.get("display_weight_unit", "unit simulasi")
     access_status = scenario.get("access_status", {}) or {}
     coordinates = scenario.get("coordinates", {}) or {}
+    facilities = _facility_summary(scenario)
     catalog = _edge_catalog(graph)
 
     initial_stats: dict = {}
@@ -75,13 +76,15 @@ def run_simulation(scenario_path: str | Path = DEFAULT_SCENARIO,
     _print_sources(metadata)
     _print_node_index(graph, start, goal, initial, updated)
     _print_edge_index(catalog, access_status, unit_label)
+    if facilities is not None:
+        _print_facilities(facilities)
 
     if initial is None:
         _print_section("03  RUTE AWAL")
         print("  Rute tidak ditemukan dari titik awal ke tujuan.")
         return 1
 
-    _print_route("05  RUTE AWAL", graph, initial, unit_label, catalog, initial_stats)
+    _print_route("05  RUTE AWAL", graph, initial, unit_label, catalog, initial_stats, facilities)
 
     if closure_edge:
         description = str(
@@ -105,7 +108,7 @@ def run_simulation(scenario_path: str | Path = DEFAULT_SCENARIO,
             _print_section("07  HASIL SETELAH PENUTUPAN")
             print(f"  Tidak ada rute alternatif setelah ruas {closure_edge} ditutup.")
             return 1
-        _print_route("07  RUTE ALTERNATIF", graph, updated, unit_label, catalog, alternate_stats)
+        _print_route("07  RUTE ALTERNATIF", graph, updated, unit_label, catalog, alternate_stats, facilities)
         difference = updated.cost - initial.cost
         sign = "+" if difference >= 0 else ""
         _print_section("08  RINGKASAN HASIL")
@@ -220,6 +223,93 @@ def _node_role(node_id: str, start: str, goal: str,
     return ", ".join(roles) if roles else "jaringan pendukung (belum dilalui rute)"
 
 
+def _facility_summary(scenario: dict) -> dict | None:
+    """Ringkas fasilitas node; None bila skenario tidak memuat fasilitas."""
+    entries = scenario.get("node_facilities") or {}
+    if not entries:
+        return None
+    summary: dict = {"verified": [], "model": [], "police": [], "stations": [], "by_node": {}}
+    for node_id, fields in entries.items():
+        facility = fields.get("facility") or {}
+        hydrant = fields.get("hydrant")
+        kind = facility.get("type")
+        summary["by_node"][node_id] = {"hydrant": hydrant, "facility": facility}
+        if kind == "police_station":
+            summary["police"].append((node_id, facility))
+        elif kind == "fire_station":
+            summary["stations"].append((node_id, facility))
+        if hydrant is not None:
+            bucket = "verified" if hydrant.get("verified") else "model"
+            summary[bucket].append((node_id, hydrant))
+    return summary
+
+
+def _print_facilities(summary: dict) -> None:
+    """Bagian 04B: sumber air (hydrant) dan fasilitas perbekalan di jaringan."""
+    _print_section("04B  SUMBER AIR DAN FASILITAS")
+    _print_field("Aturan model", "hydrant di setiap node kecuali node kantor polisi")
+    verified_text = "; ".join(
+        f"{hydrant.get('name', 'tanpa nama')} ({hydrant.get('distance_m')} m dari {node_id})"
+        for node_id, hydrant in summary["verified"]
+    ) or "tidak ada"
+    _print_field(
+        "Hydrant terverifikasi OSM",
+        f"{len(summary['verified'])} node - {verified_text}",
+    )
+    _print_field(
+        "Hydrant asumsi model",
+        f"{len(summary['model'])} node (jejak jarak ke hydrant OSM tercatat di YAML per node)",
+    )
+    for node_id, facility in summary["police"]:
+        _print_field("Kantor polisi (tanpa hydrant)", node_id)
+        _print_wrapped(
+            f"{facility.get('name')} ({facility.get('distance_m')} m dari node) - "
+            "tidak memiliki hydrant sesuai aturan model",
+            indent="    ",
+            width=WIDTH - 4,
+        )
+    if summary["stations"]:
+        print("  Kantor damkar logistik (armada/personel = asumsi model):")
+        for node_id, facility in summary["stations"]:
+            detail = (
+                f"{node_id} - {facility.get('trucks')} mobil, "
+                f"{facility.get('personnel')} personel"
+            )
+            _print_wrapped(detail, indent="    ", width=WIDTH - 4)
+
+
+def _route_water_report(nodes: list[str], facilities: dict) -> list[str]:
+    """Baris 'isi air di rute': berapa node rute punya hydrant, mana yang nyata."""
+    on_route = [node_id for node_id in nodes if node_id in facilities["by_node"]]
+    with_hydrant = [
+        node_id for node_id in on_route
+        if facilities["by_node"][node_id].get("hydrant") is not None
+    ]
+    verified = [
+        node_id for node_id in with_hydrant
+        if facilities["by_node"][node_id]["hydrant"].get("verified")
+    ]
+    police = [
+        node_id for node_id in on_route
+        if facilities["by_node"][node_id].get("facility", {}).get("type") == "police_station"
+    ]
+    lines = [
+        f"{len(with_hydrant)}/{len(nodes)} node rute ber-hydrant (isi air di node tersebut)"
+    ]
+    if verified:
+        detail = "; ".join(
+            f"{facilities['by_node'][node_id]['hydrant'].get('name', 'tanpa nama')} "
+            f"@ {node_id} ({facilities['by_node'][node_id]['hydrant'].get('distance_m')} m)"
+            for node_id in verified
+        )
+        lines.append(f"terverifikasi OSM: {detail}")
+    else:
+        lines.append("tanpa hydrant terverifikasi OSM di rute ini")
+    if police:
+        lines.append("melewati kantor polisi tanpa hydrant: " + ", ".join(police))
+    return lines
+
+
 def _print_node_index(graph: Graph, start: str, goal: str,
                       initial: PathResult | None, alternate: PathResult | None) -> None:
     _print_section(f"03  DAFTAR NODE ({len(graph.nodes)} node)")
@@ -245,7 +335,7 @@ def _print_edge_index(catalog: dict[str, tuple[str, str, float, str]],
 
 def _print_route(title: str, graph: Graph, result: PathResult,
                  unit_label: str, catalog: dict[str, tuple[str, str, float, str]],
-                 stats: dict | None = None) -> None:
+                 stats: dict | None = None, facilities: dict | None = None) -> None:
     _print_section(title)
     streets: list[str] = []
     nodes = result.nodes
@@ -274,6 +364,10 @@ def _print_route(title: str, graph: Graph, result: PathResult,
     print(f"  Jumlah ruas : {max(0, len(nodes) - 1)}")
     if stats is not None and "expanded" in stats:
         print(f"  Node dieksplorasi : {stats['expanded']} (pembanding Dijkstra vs A*)")
+    if facilities is not None:
+        print("  Sumber air di rute:")
+        for line in _route_water_report(nodes, facilities):
+            _print_wrapped(line, indent="    ", width=WIDTH - 4)
     if streets:
         print("\n  JALUR DAMKAR (urutan jalan yang dilalui)")
         sequence = "  ->  ".join(streets)

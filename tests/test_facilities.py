@@ -184,44 +184,67 @@ def test_default_scenario_facility_inventory():
     graph, scenario = load_scenario(DEFAULT_SCENARIO)
     assert scenario["metadata"]["facilities"] is True
 
-    hydrant_nodes = []
-    police_nodes = []
-    fire_stations = []
-    for node_id in graph.nodes:
-        item = next(
-            n for n in _raw_nodes(DEFAULT_SCENARIO) if str(n["id"]) == node_id
-        )
-        facility = item.get("facility") or {}
-        if facility.get("type") == "police_station":
-            police_nodes.append(node_id)
-            assert "hydrant" not in item, "node kantor polisi tidak boleh ber-hydrant"
-        elif facility.get("type") == "fire_station":
-            fire_stations.append(node_id)
-            assert item.get("hydrant") is not None
-        elif "hydrant" in item:
-            hydrant_nodes.append(node_id)
+    entries = scenario["node_facilities"]
+    hydrant_nodes = [
+        node_id for node_id, fields in entries.items() if "hydrant" in fields
+    ]
+    police_nodes = [
+        node_id for node_id, fields in entries.items()
+        if (fields.get("facility") or {}).get("type") == "police_station"
+    ]
+    fire_stations = [
+        node_id for node_id, fields in entries.items()
+        if (fields.get("facility") or {}).get("type") == "fire_station"
+    ]
 
+    assert len(graph.nodes) == 34
     assert police_nodes == ["simpang_cipto_bugangan"]
+    assert "hydrant" not in entries["simpang_cipto_bugangan"]
     assert sorted(fire_stations) == [
         "pos_damkar_tambahan_barat",
         "pos_damkar_tambahan_utara",
         "pos_damkar_tambahan_walisongo",
     ]
     # 34 node - 1 kantor polisi = 33 node ber-hydrant.
-    assert len(hydrant_nodes) + len(fire_stations) == 33
+    assert len(hydrant_nodes) == 33
 
-    verified = next(
-        n for n in _raw_nodes(DEFAULT_SCENARIO) if str(n["id"]) == "simpang_depok_wahidhasyim"
-    )["hydrant"]
+    verified = entries["simpang_depok_wahidhasyim"]["hydrant"]
     assert verified["verified"] is True
     assert verified["osm_node"] == 5466104936
     assert verified["name"] == "Hydrant BCA"
 
 
-def _raw_nodes(path):
-    import yaml
+def test_simulation_prints_water_and_facility_section(capsys):
+    from pathfinding.simulation import run_simulation
 
-    return yaml.safe_load(open(path, encoding="utf-8"))["nodes"]
+    assert run_simulation(DEFAULT_SCENARIO) == 0
+    output = capsys.readouterr().out
+    assert "04B  SUMBER AIR DAN FASILITAS" in output
+    assert "Hydrant BCA" in output
+    assert "Polsek Semarang Timur" in output
+    assert "pos_damkar_tambahan_walisongo - 3 mobil, 10 personel" in output
+    # Rute awal (utara) melewati node ber-hydrant, termasuk hydrant nyata.
+    assert "Sumber air di rute" in output
+    assert "node rute ber-hydrant (isi air di node tersebut)" in output
+    assert "Hydrant BCA @ simpang_depok_wahidhasyim" in output
+
+
+def test_simulation_alternative_route_notes_police_node_without_water(capsys):
+    """Rute alternatif (selatan) melewati node kantor polisi: tanpa hydrant."""
+    from pathfinding.simulation import run_simulation
+
+    assert run_simulation(DEFAULT_SCENARIO) == 0
+    output = capsys.readouterr().out
+    assert "melewati kantor polisi tanpa hydrant: simpang_cipto_bugangan" in output
+
+
+def test_demo_scenario_has_no_facility_section(capsys):
+    from pathfinding.simulation import run_simulation
+
+    assert run_simulation(DEMO_SCENARIO) == 0
+    output = capsys.readouterr().out
+    assert "SUMBER AIR DAN FASILITAS" not in output
+    assert "Sumber air di rute" not in output
 
 
 def test_demo_scenario_has_no_facility_requirement():

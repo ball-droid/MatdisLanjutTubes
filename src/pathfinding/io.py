@@ -136,7 +136,20 @@ def load_scenario(path: str | Path) -> tuple[Graph, dict[str, Any]]:
     scenario = _load_scenario_block(data, graph)
     scenario["access_status"] = access_status
     scenario["coordinates"] = _collect_coordinates(data["nodes"])
+    scenario["node_facilities"] = _collect_facilities(data["nodes"])
     return graph, scenario
+
+
+def _collect_facilities(items: list[Any]) -> dict[str, dict[str, Any]]:
+    """Kumpulkan field hydrant/facility per node untuk keluaran simulasi."""
+    collected: dict[str, dict[str, Any]] = {}
+    for item in items:
+        if not isinstance(item, dict) or "id" not in item:
+            continue
+        fields = {key: item[key] for key in ("hydrant", "facility") if key in item}
+        if fields:
+            collected[str(item["id"]).strip()] = fields
+    return collected
 
 
 def _collect_coordinates(items: list[Any]) -> dict[str, tuple[float, float]]:
