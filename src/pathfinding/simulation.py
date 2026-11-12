@@ -9,6 +9,7 @@ from .astar import astar
 from .dijkstra import PathResult, dijkstra
 from .graph import Graph
 from .io import load_scenario
+from .rute_alternatif import plan_alternatives
 
 DEMO_SCENARIO = Path(__file__).resolve().parents[2] / "data" / "pasar_johar_demo.yaml"
 DEFAULT_SCENARIO = Path(__file__).resolve().parents[2] / "data" / "pasar_johar_damkar.yaml"
@@ -46,17 +47,22 @@ def run_simulation(scenario_path: str | Path = DEFAULT_SCENARIO,
     catalog = _edge_catalog(graph)
 
     initial_stats: dict = {}
-    alternate_stats: dict = {}
     initial = _search(algorithm, graph, start, goal, blocked, coordinates, initial_stats)
     closure_edge = str(scenario.get("closure_edge") or "")
-    updated = (
-        _search(
-            algorithm, graph, start, goal,
-            {closure_edge} | blocked, coordinates, alternate_stats,
-        )
-        if closure_edge
-        else None
-    )
+    # Rute alternatif dihitung dalam kondisi ruas hambatan sudah ditutup.
+    search_blocked = set(blocked) | ({closure_edge} if closure_edge else set())
+
+    plans = scenario.get("alternatives") or []
+    if not plans and closure_edge:
+        # Skenario lama tanpa blok `alternatives`: satu rute alternatif tercepat.
+        plans = [{"id": "tercepat", "label": "Rute alternatif", "purpose": "", "waypoints": []}]
+
+    def _leg_search(source: str, target: str) -> PathResult | None:
+        return _search(algorithm, graph, source, target, search_blocked, coordinates, {})
+
+    alternatives = plan_alternatives(plans, start, goal, _leg_search) if plans else []
+    found = [alt for alt in alternatives if alt["result"] is not None]
+    updated = found[0]["result"] if found else None
 
     _print_header(
         title=str(metadata.get("title", scenario.get("title", "Simulasi Pathfinding"))),
@@ -104,21 +110,80 @@ def run_simulation(scenario_path: str | Path = DEFAULT_SCENARIO,
         _print_wrapped(description, indent="    ", width=WIDTH - 4)
         print("  Tindakan   : Ruas dikecualikan dari pencarian rute berikutnya.")
 
-        if updated is None:
+        if not found:
             _print_section("07  HASIL SETELAH PENUTUPAN")
             print(f"  Tidak ada rute alternatif setelah ruas {closure_edge} ditutup.")
             return 1
-        _print_route("07  RUTE ALTERNATIF", graph, updated, unit_label, catalog, alternate_stats, facilities)
-        difference = updated.cost - initial.cost
+        _print_section(
+            f"07  RUTE ALTERNATIF ({len(found)} dari {len(alternatives)} unit damkar)"
+        )
+        print("  Tiap unit damkar memakai rute BERBEDA; daftar berurutan dari yang")
+        print("  tercepat. Rute bertanda titik layanan melewati rumah sakit/kantor polisi.")
+        for index, alt in enumerate(alternatives, start=1):
+            result = alt["result"]
+            title = f"07.{index}  {alt['label']}"
+            intro: list[str] = []
+            if alt["purpose"]:
+                intro.append(alt["purpose"])
+            if alt["waypoints"]:
+                intro.append("Titik layanan (dilewati rute ini): " + ", ".join(alt["waypoints"]))
+            if result is None:
+                _print_section(title)
+                for line in intro:
+                    _print_wrapped(line, indent="  ", width=WIDTH - 2)
+                print("  Tidak terjangkau setelah penutupan; unit ini memakai rute lain.")
+                continue
+            intro.append(
+                f"Biaya total: {result.cost:g} {unit_label} | {len(result.edges)} ruas | "
+                f"{len(result.nodes)} node"
+            )
+            _print_route(title, graph, result, unit_label, catalog, None, facilities, intro)
+
+        fastest = found[0]["result"]
+        difference = fastest.cost - initial.cost
         sign = "+" if difference >= 0 else ""
         _print_section("08  RINGKASAN HASIL")
         _print_field("Rute awal", f"{initial.cost:g} {unit_label} | {len(initial.nodes) - 1} ruas")
-        _print_field("Rute alternatif", f"{updated.cost:g} {unit_label} | {len(updated.nodes) - 1} ruas")
-        _print_field("Perubahan bobot total", f"{sign}{difference:g} {unit_label}")
+        for alt in found:
+            result = alt["result"]
+            detail = f"{result.cost:g} {unit_label} | {len(result.nodes) - 1} ruas"
+            if alt["waypoints"]:
+                detail += f" | lewat {', '.join(alt['waypoints'])}"
+            _print_field(f"Alternatif {alt['id']}", detail)
+        _print_field(
+            "Perubahan bobot (rute alternatif tercepat)",
+            f"{sign}{difference:g} {unit_label}",
+        )
         _print_field(
             "Selisih ruas",
-            f"{len(updated.nodes) - len(initial.nodes):+d} ruas",
+            f"{len(fastest.nodes) - len(initial.nodes):+d} ruas",
         )
+
+        # Cakupan: seberapa banyak node yang benar-benar dikunjungi seluruh
+        # armada (rute awal + seluruh alternatif + rute dari tiap kantor damkar).
+        visited = set(initial.nodes)
+        station_routes: list[str] = []
+        for node_id, _facility in (facilities or {}).get("stations", []):
+            station_route = _search(
+                algorithm, graph, node_id, goal, blocked, coordinates, {}
+            )
+            if station_route is not None:
+                visited |= set(station_route.nodes)
+                station_routes.append(
+                    f"{node_id} -> pasar: {station_route.cost:g} {unit_label} "
+                    f"({len(station_route.nodes) - 1} ruas)"
+                )
+        for alt in found:
+            visited |= set(alt["result"].nodes)
+        _print_field(
+            "Node unik dikunjungi",
+            f"{len(visited)}/{len(graph.nodes)} node (rute awal + {len(found)} alternatif"
+            f" + {len(station_routes)} rute kantor damkar)",
+        )
+        if station_routes:
+            print("  Rute dari kantor damkar (kondisi normal):")
+            for line in station_routes:
+                _print_wrapped(line, indent="    ", width=WIDTH - 4)
         _print_field("Status", "Rute alternatif berhasil ditemukan")
 
     _print_data_notes(metadata)
@@ -335,8 +400,11 @@ def _print_edge_index(catalog: dict[str, tuple[str, str, float, str]],
 
 def _print_route(title: str, graph: Graph, result: PathResult,
                  unit_label: str, catalog: dict[str, tuple[str, str, float, str]],
-                 stats: dict | None = None, facilities: dict | None = None) -> None:
+                 stats: dict | None = None, facilities: dict | None = None,
+                 intro: list[str] | None = None) -> None:
     _print_section(title)
+    for line in intro or []:
+        _print_wrapped(line, indent="  ", width=WIDTH - 2)
     streets: list[str] = []
     nodes = result.nodes
     for index, node_id in enumerate(nodes):
