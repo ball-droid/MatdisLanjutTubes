@@ -5,16 +5,33 @@ import argparse
 import textwrap
 from pathlib import Path
 
-from .dijkstra import PathResult, dijkstra, reroute_after_closure
+from .astar import astar
+from .dijkstra import PathResult, dijkstra
 from .graph import Graph
 from .io import load_scenario
 
 DEMO_SCENARIO = Path(__file__).resolve().parents[2] / "data" / "pasar_johar_demo.yaml"
 DEFAULT_SCENARIO = Path(__file__).resolve().parents[2] / "data" / "pasar_johar_damkar.yaml"
 WIDTH = 78
+ALGORITHMS = {
+    "dijkstra": "Dijkstra (baseline / pencarian ulang penuh)",
+    "astar": "A* (heuristik haversine admissible / pencarian ulang penuh)",
+}
 
 
-def run_simulation(scenario_path: str | Path = DEFAULT_SCENARIO) -> int:
+def _search(algorithm, graph, start, goal, blocked, coordinates, stats):
+    """Jalankan algoritma pilihan dengan kontrak hasil yang sama."""
+    if algorithm == "astar":
+        return astar(graph, start, goal, blocked, coordinates=coordinates, stats=stats)
+    if algorithm == "dijkstra":
+        return dijkstra(graph, start, goal, blocked, stats=stats)
+    raise ValueError(f"Algoritma tidak dikenal: {algorithm!r}. Pilihan: {sorted(ALGORITHMS)}.")
+
+
+def run_simulation(scenario_path: str | Path = DEFAULT_SCENARIO,
+                   algorithm: str = "dijkstra") -> int:
+    if algorithm not in ALGORITHMS:
+        raise ValueError(f"Algoritma tidak dikenal: {algorithm!r}. Pilihan: {sorted(ALGORITHMS)}.")
     graph, scenario = load_scenario(scenario_path)
     start, goal = str(scenario.get("start", "")), str(scenario.get("goal", ""))
     blocked = set(str(item) for item in scenario.get("blocked_edges", []))
@@ -24,12 +41,18 @@ def run_simulation(scenario_path: str | Path = DEFAULT_SCENARIO) -> int:
     metadata = scenario.get("metadata", {}) or {}
     unit_label = metadata.get("display_weight_unit", "unit simulasi")
     access_status = scenario.get("access_status", {}) or {}
+    coordinates = scenario.get("coordinates", {}) or {}
     catalog = _edge_catalog(graph)
 
-    initial = dijkstra(graph, start, goal, blocked)
+    initial_stats: dict = {}
+    alternate_stats: dict = {}
+    initial = _search(algorithm, graph, start, goal, blocked, coordinates, initial_stats)
     closure_edge = str(scenario.get("closure_edge") or "")
     updated = (
-        reroute_after_closure(graph, start, goal, {closure_edge} | blocked)
+        _search(
+            algorithm, graph, start, goal,
+            {closure_edge} | blocked, coordinates, alternate_stats,
+        )
         if closure_edge
         else None
     )
@@ -44,7 +67,7 @@ def run_simulation(scenario_path: str | Path = DEFAULT_SCENARIO) -> int:
     _print_section("01  KONFIGURASI SIMULASI")
     _print_field("Titik awal", graph.nodes.get(start, start))
     _print_field("Titik tujuan", graph.nodes.get(goal, goal))
-    _print_field("Algoritma", "Dijkstra (baseline / pencarian ulang penuh)")
+    _print_field("Algoritma", ALGORITHMS[algorithm])
     _print_field("Model graf", str(metadata.get("graph_type", "tidak berarah (dua arah)")))
     _print_field("Satuan bobot", str(unit_label))
     _print_field("Ruas tertutup sejak awal", ", ".join(sorted(blocked)) if blocked else "Tidak ada")
@@ -58,7 +81,7 @@ def run_simulation(scenario_path: str | Path = DEFAULT_SCENARIO) -> int:
         print("  Rute tidak ditemukan dari titik awal ke tujuan.")
         return 1
 
-    _print_route("05  RUTE AWAL", graph, initial, unit_label, catalog)
+    _print_route("05  RUTE AWAL", graph, initial, unit_label, catalog, initial_stats)
 
     if closure_edge:
         description = str(
@@ -82,7 +105,7 @@ def run_simulation(scenario_path: str | Path = DEFAULT_SCENARIO) -> int:
             _print_section("07  HASIL SETELAH PENUTUPAN")
             print(f"  Tidak ada rute alternatif setelah ruas {closure_edge} ditutup.")
             return 1
-        _print_route("07  RUTE ALTERNATIF", graph, updated, unit_label, catalog)
+        _print_route("07  RUTE ALTERNATIF", graph, updated, unit_label, catalog, alternate_stats)
         difference = updated.cost - initial.cost
         sign = "+" if difference >= 0 else ""
         _print_section("08  RINGKASAN HASIL")
@@ -221,7 +244,8 @@ def _print_edge_index(catalog: dict[str, tuple[str, str, float, str]],
 
 
 def _print_route(title: str, graph: Graph, result: PathResult,
-                 unit_label: str, catalog: dict[str, tuple[str, str, float, str]]) -> None:
+                 unit_label: str, catalog: dict[str, tuple[str, str, float, str]],
+                 stats: dict | None = None) -> None:
     _print_section(title)
     streets: list[str] = []
     nodes = result.nodes
@@ -248,6 +272,8 @@ def _print_route(title: str, graph: Graph, result: PathResult,
             print("       ▼")
     print("\n  Total bobot : " + f"{result.cost:g} {unit_label}")
     print(f"  Jumlah ruas : {max(0, len(nodes) - 1)}")
+    if stats is not None and "expanded" in stats:
+        print(f"  Node dieksplorasi : {stats['expanded']} (pembanding Dijkstra vs A*)")
     if streets:
         print("\n  JALUR DAMKAR (urutan jalan yang dilalui)")
         sequence = "  ->  ".join(streets)
@@ -284,10 +310,14 @@ def _print_data_notes(metadata: dict) -> None:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Simulasi pencarian rute Dijkstra.")
+    parser = argparse.ArgumentParser(description="Simulasi pencarian rute Dijkstra/A*.")
     parser.add_argument("--scenario", default=str(DEFAULT_SCENARIO), help="Path file YAML skenario.")
+    parser.add_argument(
+        "--algorithm", default="dijkstra", choices=sorted(ALGORITHMS),
+        help="Algoritma pencarian rute (default: dijkstra).",
+    )
     args = parser.parse_args()
-    raise SystemExit(run_simulation(args.scenario))
+    raise SystemExit(run_simulation(args.scenario, algorithm=args.algorithm))
 
 
 if __name__ == "__main__":
