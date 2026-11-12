@@ -203,7 +203,10 @@ ringkasannya:
   jarak ke hydrant OSM terdekat, supaya mudah ditinjau, bukan dikoreksi
   diam-diam — sama seperti keputusan bobot pada bagian 4.3.
 - Tiga kantor pemadam tambahan (OSM way 1338307869, 740895779, 564500892)
-  menjadi node logistik bercabang mati; jumlah mobil/personel adalah asumsi
-  model karena tidak tersedia di berita maupun OSM.
+  menjadi node logistik; jumlah mobil/personel adalah asumsi model karena
+  tidak tersedia di berita maupun OSM. Ketiganya tidak menggantung: tiap
+  kantor dilewati oleh rutenya sendiri ke pasar (22,09 / 24,11 / 28,99 menit,
+  layer ungu pada peta README bagian 21), jadi seluruh node tambahan benar-
+  benar dilalui damkar.
 - Jumlah node/edge skenario menjadi 34/36; rute awal dan alternatif tidak
   berubah (10,74 dan 11,93 menit).

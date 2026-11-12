@@ -569,10 +569,15 @@ ekstraksi **2026-11-12**).
 2. **Node kantor polisi dilarang memiliki hydrant** — loader menolaknya, jadi
    pelanggaran aturan tidak bisa lolos diam-diam.
 3. **Kantor damkar tambahan = node logistik.** Tiga kantor pemadam sungguhan
-   di OSM dijadikan node bercabang mati: `pos_damkar_tambahan_barat`,
+   di OSM dijadikan node: `pos_damkar_tambahan_barat`,
    `pos_damkar_tambahan_utara`, `pos_damkar_tambahan_walisongo`. Fungsi modelnya
    tempat mengambil **mobil** dan **personel** tambahan; jumlahnya (2/2/3 mobil,
    8/8/10 personel) adalah **asumsi model** karena tidak ada di berita maupun OSM.
+   Ketiganya **bukan cabang menggantung**: tiap kantor dilewati oleh rute
+   damkar-nya sendiri menuju pasar (22,09 / 24,11 / 28,99 menit, layer ungu di
+   peta bagian 21), sehingga seluruh node yang ditambahkan benar-benar dilalui
+   kendaraan. Rute awal dan alternatif tetap tidak berubah karena ketiganya
+   berada di luar koridor tersebut.
 4. Koneksi kantor damkar ke jaringan memakai jarak rute OSRM (3856/6084/4775 m)
    dan kecepatan model permukiman; nama ruas penghubung belum terverifikasi,
    karena itu edge ditandai `connection: model`.
@@ -596,7 +601,9 @@ Contoh penulisan pada `data/pasar_johar_damkar.yaml`:
 ### 20.3 Dampak ke rute dan keluaran
 
 - Rute awal dan alternatif **tidak berubah** (10,74 dan 11,93 menit) karena
-  ketiga node logistik bercabang mati dan hydrant adalah atribut, bukan edge.
+  ketiga node logistik berada di luar koridor rute tersebut. Sebagai gantinya
+  tersedia **rute dari tiap kantor damkar ke pasar** (22,09 / 24,11 / 28,99
+  menit) yang melewati ketiga node tambahan — lihat bagian 21.
 - Simulasi kini mencetak bagian **`04B SUMBER AIR DAN FASILITAS`** (aturan
   model, hydrant terverifikasi, jumlah hydrant model, node kantor polisi,
   armada/personel tiap kantor) serta laporan **`Sumber air di rute`** pada
@@ -641,13 +648,19 @@ kantor polisi/damkar) tetap OpenStreetMap dan atribusinya tetap dicantumkan.
 Isi peta (semua dihitung ulang dari YAML, jadi tidak pernah beda dengan
 keluaran simulasi):
 
+Semua garis — jaringan abu-abu maupun rute — **mengikuti jalan sungguhan**:
+geometri tiap ruas diambil dari rute mengemudi OSRM saat generate (36/36 ruas
+pada generate terakhir), bukan garis lurus antar node; mode `--tanpa-osm`
+kembali memakai garis lurus.
+
 | Lapisan | Isi |
 |---|---|
 | Jaringan (bisa dilalui damkar) | 36 ruas + 34 node graf model, klik untuk bobot/nama jalan |
 | Rute awal | pola biru tebal, 10,74 menit / 14 ruas |
-| Ruas tertutup | merah putus-putus pada `e14` (Jl. Barito) — hambatan kerumunan |
 | Rute alternatif | oranye putus-putus, 11,93 menit / 17 ruas (koridor selatan) |
-| Node & waktu tempuh | warna node = lama dari pos damkar (≤3 hijau, 3–6 kuning, 6–9 oranye, >9 merah) — jawaban "ke mana saja damkar bisa pergi dan berapa lama" |
+| Rute dari kantor damkar | ungu, satu rute per kantor tambahan → pasar: **22,09 / 24,11 / 28,99 menit** — ketiga node logistik yang ditambahkan **dilewati** rute ini |
+| Ruas tertutup | merah putus-putus pada `e14` (Jl. Barito) — hambatan kerumunan |
+| Node & waktu tempuh | warna node = lama dari pos damkar (≤3 hijau, 3–6 kuning, 6–9 oranye, >9 merah) — jawaban "ke mana saja damkar bisa pergi dan berapa lamanya" |
 | Fasilitas OSM | 22 hydrant, 18 kantor polisi, 4 kantor damkar asli dari OpenStreetMap |
 
 Klik sebuah node untuk melihat perannya (rute awal/alternatif/tujuan), waktu
