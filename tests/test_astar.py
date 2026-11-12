@@ -185,3 +185,24 @@ def test_simulation_runs_with_astar(capsys):
 def test_simulation_rejects_unknown_algorithm():
     with pytest.raises(ValueError, match="Algoritma tidak dikenal"):
         run_simulation(DEFAULT_SCENARIO, algorithm="dstar")
+
+
+def test_benchmark_compare_reports_both_algorithms():
+    from pathfinding.benchmark import benchmark_compare
+
+    report = benchmark_compare(DEFAULT_SCENARIO, repeats=20)
+    assert report["repeats"] == 20
+    baseline = report["algorithms"]["dijkstra"]
+    candidate = report["algorithms"]["astar"]
+    for entry in (baseline, candidate):
+        assert entry["mean_ms"] >= 0
+        assert entry["min_ms"] <= entry["max_ms"]
+        assert entry["route_edges"] == entry["route_nodes"] - 1
+    # Perbandingan yang sah: biaya sama, A* tidak lebih boros eksplorasi.
+    assert candidate["cost"] == pytest.approx(baseline["cost"])
+    assert candidate["expanded"] <= baseline["expanded"]
+    assert report["speedup_dijkstra_over_astar"] > 0
+    assert report["expanded_saved"] == baseline["expanded"] - candidate["expanded"]
+
+    with pytest.raises(ValueError, match="pengulangan"):
+        benchmark_compare(DEFAULT_SCENARIO, repeats=0)
