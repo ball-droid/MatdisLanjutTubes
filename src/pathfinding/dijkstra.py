@@ -32,13 +32,13 @@ class PathResult:
             raise ValueError("Jumlah ruas rute harus sama dengan jumlah node rute - 1.")
 
 
-def dijkstra(graph: Graph, start: str, goal: str,
-             blocked_edges: AbstractSet[str] | None = None) -> PathResult | None:
-    """Menghasilkan rute minimum atau None jika tujuan tidak terjangkau.
+def validate_search_inputs(graph: Graph, start: str, goal: str,
+                           blocked_edges: AbstractSet[str] | None = None) -> set[str]:
+    """Pemeriksaan yang sama untuk Dijkstra maupun A*.
 
-    `blocked_edges` adalah himpunan ID ruas yang dikeluarkan dari graf (skenario
-    akses terhambat). ID yang tidak dikenal ditolak, agar penutupan yang salah
-    ketik tidak terlihat seperti penutupan yang berhasil.
+    Titik awal/tujuan wajib ada dan himpunan ruas tertutup wajib dikenal graf:
+    penutupan yang salah ketik harus gagal nyaring, bukan terlihat seperti
+    penutupan yang berhasil. Mengembalikan himpunan ruas tertutup sebagai set.
     """
     if not graph.has_node(start):
         raise KeyError(f"Node awal tidak ditemukan: {start!r}.")
@@ -52,7 +52,25 @@ def dijkstra(graph: Graph, start: str, goal: str,
             + ", ".join(repr(item) for item in unknown)
             + "."
         )
+    return blocked
+
+
+def dijkstra(graph: Graph, start: str, goal: str,
+             blocked_edges: AbstractSet[str] | None = None,
+             stats: dict | None = None) -> PathResult | None:
+    """Menghasilkan rute minimum atau None jika tujuan tidak terjangkau.
+
+    `blocked_edges` adalah himpunan ID ruas yang dikeluarkan dari graf (skenario
+    akses terhambat). ID yang tidak dikenal ditolak, agar penutupan yang salah
+    ketik tidak terlihat seperti penutupan yang berhasil.
+
+    Bila `stats` diberikan, diisi ``{"expanded": <jumlah node yang dieksplorasi>}``
+    sebagai bahan perbandingan dengan A* pada pemanggilan yang sama.
+    """
+    blocked = validate_search_inputs(graph, start, goal, blocked_edges)
     if start == goal:
+        if stats is not None:
+            stats["expanded"] = 0
         return PathResult(nodes=[start], cost=0.0, edges=[])
 
     distances = {node_id: inf for node_id in graph.nodes}
@@ -60,11 +78,13 @@ def dijkstra(graph: Graph, start: str, goal: str,
     previous_edge: dict[str, str] = {}
     distances[start] = 0.0
     queue: list[tuple[float, str]] = [(0.0, start)]
+    expanded = 0
 
     while queue:
         current_distance, current = heapq.heappop(queue)
         if current_distance > distances[current]:
             continue
+        expanded += 1
         if current == goal:
             break
         for edge in graph.neighbors(current):
@@ -79,6 +99,8 @@ def dijkstra(graph: Graph, start: str, goal: str,
                 previous_edge[edge.target] = edge.edge_id
                 heapq.heappush(queue, (candidate, edge.target))
 
+    if stats is not None:
+        stats["expanded"] = expanded
     if distances[goal] == inf:
         return None
 
@@ -94,10 +116,11 @@ def dijkstra(graph: Graph, start: str, goal: str,
 
 
 def reroute_after_closure(graph: Graph, start: str, goal: str,
-                          closed_edges: AbstractSet[str]) -> PathResult | None:
+                          closed_edges: AbstractSet[str],
+                          stats: dict | None = None) -> PathResult | None:
     """Hitung ulang rute setelah ruas ditutup; tetap baseline Dijkstra.
 
     Ini bukan D* Lite: pencarian dihitung lagi pada tiap pemanggilan.
     Mengembalikan None bila setelah penutupan tujuan menjadi tidak terjangkau.
     """
-    return dijkstra(graph, start, goal, closed_edges)
+    return dijkstra(graph, start, goal, closed_edges, stats)

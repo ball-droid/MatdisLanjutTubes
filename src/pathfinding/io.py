@@ -40,7 +40,27 @@ def load_scenario(path: str | Path) -> tuple[Graph, dict[str, Any]]:
     access_status = _load_edges(data["edges"], graph, reference_schema="execution_plan" in data)
     scenario = _load_scenario_block(data, graph)
     scenario["access_status"] = access_status
+    scenario["coordinates"] = _collect_coordinates(data["nodes"])
     return graph, scenario
+
+
+def _collect_coordinates(items: list[Any]) -> dict[str, tuple[float, float]]:
+    """Koordinat node untuk heuristik A*; kosong bila skenario tanpa jejak peta.
+
+    Graph sendiri hanya menyimpan id dan label, jadi lat/lon diekstrak di sini
+    (validasi kelengkapan field peta sudah dilakukan ``_load_nodes``).
+    """
+    coordinates: dict[str, tuple[float, float]] = {}
+    for item in items:
+        if not isinstance(item, dict) or "id" not in item:
+            continue
+        if "lat" not in item or "lon" not in item:
+            return {}
+        try:
+            coordinates[str(item["id"]).strip()] = (float(item["lat"]), float(item["lon"]))
+        except (TypeError, ValueError):
+            return {}
+    return coordinates
 
 
 def _load_nodes(items: list[Any], graph: Graph) -> None:
